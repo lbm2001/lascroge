@@ -49,8 +49,8 @@ parser.add_argument('--pred', default=True, action="store_false")
 args = parser.parse_args()
 print(args)
 
-
-model = JTNNVAE(args.hidden_size, args.latent_size, args.depthT, args.encode, args.pred).cuda()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = JTNNVAE(args.hidden_size, args.latent_size, args.depthT, args.encode, args.pred).to(device)
 print(model)
 
 
@@ -113,7 +113,7 @@ for epoch in range(args.epoch):
         cur_loader_idx += batch_size
 
         batch = tensorize(cur_attr, cur_conn)
-        loc_batch = torch.tensor(cur_loc, dtype=torch.float32).cuda().reshape(cur_attr.shape[0], 16)
+        loc_batch = torch.tensor(cur_loc, dtype=torch.float32).to(device).reshape(cur_attr.shape[0], 16)
         total_step += 1
 
         model.zero_grad()
@@ -134,6 +134,7 @@ for epoch in range(args.epoch):
         if total_step % args.save_iter == 0:
             if not os.path.exists(args.save_dir):
                 # Create a new directory because it does not exist
+                print(f"RESULTS: {args.save_dir}")
                 os.makedirs(args.save_dir)
                 print(f"creating model filepath {args.save_dir}...")
             model_path = os.path.join(args.save_dir, "model.iter-" + str(total_step))

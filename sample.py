@@ -16,6 +16,9 @@ For decoding a latent vector (place the latent vector in the corresponding part 
 For visualizing results from BO:
 - python sample.py --model sum_ls28_pred20/model.iter-400000 --visualize_from_file  --task FrozenLakeTask
 '''
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 import torch

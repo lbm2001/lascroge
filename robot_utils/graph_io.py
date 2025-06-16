@@ -1,6 +1,10 @@
 '''
 This file is in charge of converting between robot tree and graphs of format adj + feat
 '''
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import pyrobotdesign as rd
 import numpy as np
 from scipy.spatial.transform import Rotation as R

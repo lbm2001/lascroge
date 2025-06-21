@@ -1,5 +1,0 @@
-torch=='1.10.2'
-# bayesian-optimization
-pickle
-matplotlib
-numpy

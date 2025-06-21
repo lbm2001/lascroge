@@ -10,7 +10,7 @@ def generate_tree_adj_matrix(num_nodes):
     return adj
 
 # Directory to save the .npy files
-save_dir = "./data"
+save_dir = "./glso/data"
 os.makedirs(save_dir, exist_ok=True)
 
 # Parameters

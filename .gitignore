@@ -195,4 +195,5 @@ cython_debug/
 
 glso/data
 glso/results
-robot_graphs
+robot_graphs/
+mujoco_models/

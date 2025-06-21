@@ -193,7 +193,4 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-glso/data
-glso/results
-robot_graphs/
-mujoco_models/
+data/

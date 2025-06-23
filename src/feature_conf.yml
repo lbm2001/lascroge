@@ -1,0 +1,4 @@
+joint_features:
+  - range
+body_features:
+  - pos

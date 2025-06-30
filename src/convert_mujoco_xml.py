@@ -9,6 +9,11 @@ def main():
         help="Input MuJoCo XML file"
     )
     parser.add_argument(
+        "-c", "--conf",
+        required=True,
+        help="Path to YAML configuration file"
+    )
+    parser.add_argument(
         "-s", "--save",
         default=".",
         help="Directory or filename for the .npy adjacency matrix"
@@ -16,7 +21,7 @@ def main():
 
     args = parser.parse_args()
 
-    rg = RoboGraph(xml_path=args.input).build()
+    rg = RoboGraph(model_xml_path=args.input, conf_path=args.conf).build()
     rg.save(save_dir=args.save)
 
 if __name__ == "__main__":

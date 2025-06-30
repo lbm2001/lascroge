@@ -87,10 +87,22 @@ class RoboGraph(nx.DiGraph):
 
 
     def transform_feature_data(self, joint_features: list, body_features: list) -> Tuple[np.array, np.array]:
-        """
-        Transforms the feature data of various types to make it usable for the autoencoder 
-        """
-        return None, None #TODO: replace with actual logic
+        def flatten_features(features):
+            flat = []
+            for feat_list in features:
+                flat_row = []
+                for val in feat_list:
+                    if isinstance(val, (np.ndarray, list, tuple)):
+                        flat_row.extend(np.ravel(val).tolist())
+                    else:
+                        flat_row.append(val)
+                flat.append(flat_row)
+            return flat
+
+        flat_joint_features = flatten_features(joint_features)
+        flat_body_features = flatten_features(body_features)
+
+        return np.array(flat_joint_features), np.array(flat_body_features)
 
 
     def build_feature_data(self) -> None:
@@ -142,10 +154,12 @@ class RoboGraph(nx.DiGraph):
         if len(self.nodes) < 1:
             raise Exception("Graph was not yet built.")
 
-        if self.joint_features == None:
+        #if self.joint_features == None:
+        if self.joint_features is None:
             logging.warning("There are no joint features yet. The data will be saved anyway.")
         
-        if self.body_features == None:
+        #if self.body_features == None:
+        if self.body_features is None:
             logging.warning("There are no body features yet. The data will be saved anyway.")
 
 
@@ -159,6 +173,15 @@ class RoboGraph(nx.DiGraph):
 
         nodes = list(self.nodes())
         adjacency_matrix = nx.to_numpy_array(self, nodelist=nodes)
-
-        np.save(str(save_path), adjacency_matrix)
+        
+        data = {
+            "adj_matrix": adjacency_matrix,
+            "joint_features": self.joint_features,
+            "body_features": self.body_features,
+            "joint_names": [self.nodes[n]["name"] for n in nodes],
+            "joint_ids": nodes,  # Ordered node IDs
+            "robot_name": self.robot_name,
+            "conf": self.conf  # Save original config
+        }
+        np.save(str(save_path), data)
         logging.info(f"Adjacency matrix saved to {save_path}")

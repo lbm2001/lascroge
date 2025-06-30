@@ -91,8 +91,7 @@ class RoboGraph(nx.DiGraph):
         """
         Transforms the feature data of various types to make it usable for the autoencoder 
         """
-        return None, None #TODO: replace with actual logic
-
+        return joint_features, body_features
 
     def build_feature_data(self) -> None:
         """
@@ -156,18 +155,19 @@ class RoboGraph(nx.DiGraph):
 
 
         p = Path(save_dir)
-        if p.suffix:
-            save_path = p
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-        else:
-            p.mkdir(parents=True, exist_ok=True)
-            save_path = p / f"{self.robot_name}.npy"
+        p.mkdir(parents=True, exist_ok=True)
+        save_path_adj_matrix = p / f"{self.robot_name}.npy"
+        save_path_joint_features = p / f"{self.robot_name}_joint_features.npy"
+        save_path_body_features = p / f"{self.robot_name}_body_features.npy"
 
         nodes = list(self.nodes())
         adjacency_matrix = nx.to_numpy_array(self, nodelist=nodes)
 
-        np.save(str(save_path), adjacency_matrix)
-        logging.info(f"Adjacency matrix saved to {save_path}")
+        np.save(str(save_path_adj_matrix), adjacency_matrix)
+        np.save(str(save_path_joint_features), self.joint_features)
+        np.save(str(save_path_body_features), self.body_features)
+
+        logging.info(f"Adjacency and features matrix saved in {p}")
 
 
     def print_adj_matrix(self) -> None:

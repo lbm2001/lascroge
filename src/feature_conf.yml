@@ -1,4 +1,4 @@
 joint_features:
-  - range
+  - type
 body_features:
   - pos

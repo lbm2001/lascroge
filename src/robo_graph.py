@@ -6,6 +6,7 @@ import numpy as np
 import logging
 import yaml
 from typing import Tuple
+import pandas as pd
 
 class RoboGraph(nx.DiGraph):
     """
@@ -106,25 +107,30 @@ class RoboGraph(nx.DiGraph):
 
 
     def build_adj_data(self) -> None:
-        """
-        Populate the graph: for each non-root joint, add edges to all joints of its parent body (skips the world "body").
-        """
+        # TODO: Find nicer representation for joint_ids than * -1
         body_joints = self.get_body_joints()
 
-        for joint_id, body_id in enumerate(self.model.jnt_bodyid):
-            parent_body = self.model.body_parentid[body_id]
-            if parent_body == 0:
-                continue
+        # Add nodes
+        for body_id in body_joints.keys():
+            body_name = self.model.body(body_id).name
+            self.add_node(body_id, name=body_name, type="body")
 
+        for joint_id in range(self.model.njnt):
             joint_name = self.model.joint(joint_id).name
-            self.add_node(joint_id, name=joint_name)
+            self.add_node(-1 * joint_id, name=joint_name, type="joint")
 
-            for pbody_joint in body_joints[parent_body]:
-                parent_joint_name = self.model.joint(pbody_joint).name
-                self.add_node(pbody_joint, name=parent_joint_name)
-                self.add_edge(joint_id, pbody_joint)
+        for body_id, joints in body_joints.items():
+
+            parent_body = self.model.body_parentid[body_id]
+            for joint_id in joints:
+
+                self.add_edge(-1 * joint_id, parent_body)
+                self.add_edge(parent_body, -1 * joint_id)
+
+                self.add_edge(-1 * joint_id, body_id)
+                self.add_edge(body_id, -1 * joint_id)
+
         return self
-    
 
     def build(self) -> None:
         """
@@ -162,3 +168,36 @@ class RoboGraph(nx.DiGraph):
 
         np.save(str(save_path), adjacency_matrix)
         logging.info(f"Adjacency matrix saved to {save_path}")
+
+
+    def print_adj_matrix(self) -> None:
+        """
+        Print the adjacency matrix of the graph with node names as labels.
+        """
+
+        if len(self.nodes) < 1:
+            raise Exception("Graph was not yet built.")
+
+        # Get the list of nodes and their names
+        nodes = list(self.nodes())
+        node_names = [self.nodes[node]["name"] for node in nodes]
+
+        # Generate the adjacency matrix
+        adjacency_matrix = nx.to_numpy_array(self, nodelist=nodes)
+
+        # Create a pandas DataFrame for better visualization
+        adj_df = pd.DataFrame(adjacency_matrix, index=node_names, columns=node_names)
+
+        print("Adjacency Matrix with Node Names:")
+        print(adj_df)
+    
+    def print_pastable_adj_matrix(self) -> None:
+        """
+        Prints the adjacency matrix ready to paste into: https://graphonline.top
+        """
+        if len(self.nodes) < 1:
+            raise Exception("Graph was not yet built.")
+        
+        adjacency_matrix = nx.to_numpy_array(self).astype(int)
+        for row in adjacency_matrix:
+            print(",".join(map(str, row)))

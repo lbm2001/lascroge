@@ -7,6 +7,7 @@ import logging
 import yaml
 from typing import Tuple
 import pandas as pd
+from feature_matrix_builder import FeatureMatrixBuilder
 
 class RoboGraph(nx.DiGraph):
     """
@@ -15,21 +16,19 @@ class RoboGraph(nx.DiGraph):
     Nodes represent joints (by index), with a 'name' attribute.
     Edges connect each joint to all joints of its parent body.
     """
-    def __init__(self, model_xml_path: str, conf_path: str):
+    def __init__(self, model_xml_path: str, feature_conf_path: str):
         super().__init__()
         self.robot_name = os.path.splitext(os.path.basename(model_xml_path))[0] # Get filename without extension
         
-        with open(conf_path, "r") as file:
-            self.conf = yaml.safe_load(file)
+        
 
         # Build spec and model
         xml = Path(model_xml_path).read_text()
         self.spec = mujoco.MjSpec.from_string(xml)
         self.model = self.spec.compile()
-        
-        # Attribute for the feature data
-        self.joint_features = None
-        self.body_features = None
+
+        self.feature_builder = FeatureMatrixBuilder(model_xml_path=model_xml_path, feature_conf_path=feature_conf_path)
+        self.feature_matrix = None
 
         
     def get_body_joints(self) -> None:
@@ -45,64 +44,6 @@ class RoboGraph(nx.DiGraph):
         }
 
         return body_joints
-
-    def extract_feature_data(self) -> Tuple[list, list]:
-        """
-        Extracts features specified in the configuration yaml from the model and returns them.
-        """
-        joint_feat_names = self.conf["joint_features"]
-        body_feat_names = self.conf["body_features"]
-
-        joint_features = []
-        body_features = []
-
-        # Extract joint features
-        for joint_id in range(self.model.njnt):
-            joint = self.model.joint(joint_id)
-            feats = []
-
-            for feature_name in joint_feat_names: 
-                if hasattr(joint, feature_name):
-                    feature_value = getattr(joint, feature_name)
-                    feats.append(feature_value)
-                else:
-                    logging.warning(f"Feature '{feature_name}' not found for joint {joint.name}")
-            
-            joint_features.append(feats)
-        
-        # Extract link features
-        for body_id in range(self.model.nbody):
-            body = self.model.body(body_id)
-            feats = []
-
-            for feature_name in body_feat_names: 
-                if hasattr(body, feature_name):
-                    feature_value = getattr(body, feature_name)
-                    feats.append(feature_value)
-                else:
-                    logging.warning(f"Feature '{feature_name}' not found for body {body.name}")
-            
-            body_features.append(feats)
-        
-        return joint_features, body_features
-
-
-    def transform_feature_data(self, joint_features: list, body_features: list) -> Tuple[np.array, np.array]:
-        """
-        Transforms the feature data of various types to make it usable for the autoencoder 
-        """
-        return joint_features, body_features
-
-    def build_feature_data(self) -> None:
-        """
-        Builds the features for joints and bodies and saves them in the class attribute.
-        """ 
-        joint_features_raw, body_features_raw = self.extract_feature_data()
-        joint_features_transformed, body_features_transformed = self.transform_feature_data(joint_features_raw, body_features_raw)
-        
-        self.joint_features = joint_features_transformed
-        self.body_features = body_features_transformed
-        return self
 
 
     def build_adj_data(self) -> None:
@@ -131,43 +72,37 @@ class RoboGraph(nx.DiGraph):
 
         return self
 
+
     def build(self) -> None:
         """
         Builds the model for saving it
         """
-        self.build_feature_data()
         self.build_adj_data()
+        self.feature_matrix = self.feature_builder.build_matrix()
+        
 
 
     def save(self, save_dir: str) -> None:
         """
-        Safes the adjacency matrix of the robot to the specified location.
+        Safes the adjacency matrix and features of the robot to the specified location.
         """
 
         if len(self.nodes) < 1:
             raise Exception("Graph was not yet built.")
 
-        if self.joint_features == None:
-            logging.warning("There are no joint features yet. The data will be saved anyway.")
-        
-        if self.body_features == None:
-            logging.warning("There are no body features yet. The data will be saved anyway.")
-
 
         p = Path(save_dir)
         p.mkdir(parents=True, exist_ok=True)
         save_path_adj_matrix = p / f"{self.robot_name}.npy"
-        save_path_joint_features = p / f"{self.robot_name}_joint_features.npy"
-        save_path_body_features = p / f"{self.robot_name}_body_features.npy"
+        save_path_features = p / f"{self.robot_name}_features.npy"
 
         nodes = list(self.nodes())
         adjacency_matrix = nx.to_numpy_array(self, nodelist=nodes)
 
         np.save(str(save_path_adj_matrix), adjacency_matrix)
-        np.save(str(save_path_joint_features), self.joint_features)
-        np.save(str(save_path_body_features), self.body_features)
+        np.save(str(save_path_features), self.feature_matrix)
 
-        logging.info(f"Adjacency and features matrix saved in {p}")
+        logging.info(f"Adjacency matrix and feature matrix saved in {p}")
 
 
     def print_adj_matrix(self) -> None:

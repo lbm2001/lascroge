@@ -20,7 +20,7 @@ def main():
 
     args = parser.parse_args()
 
-    rg = RoboGraph(model_xml_path=args.input, conf_path=args.config)
+    rg = RoboGraph(model_xml_path=args.input, feature_conf_path=args.config)
     rg.build()
     rg.save(save_dir=args.save)
 

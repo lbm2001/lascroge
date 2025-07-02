@@ -20,12 +20,15 @@ class RoboGraph(nx.DiGraph):
         super().__init__()
         self.robot_name = os.path.splitext(os.path.basename(model_xml_path))[0] # Get filename without extension
         
-        
 
         # Build spec and model
         xml = Path(model_xml_path).read_text()
         self.spec = mujoco.MjSpec.from_string(xml)
         self.model = self.spec.compile()
+
+        # Build namespaces for joints and bodies
+        self.jnt_namespace = {i: f"joint_{i}_{self.model.joint(i).name}" for i in range(self.model.njnt)}
+        self.body_namespace = {i: f"body_{i}_{self.model.body(i).name}" for i in range(self.model.nbody)}
 
         self.feature_builder = FeatureMatrixBuilder(model_xml_path=model_xml_path, feature_conf_path=feature_conf_path)
         self.feature_matrix = None
@@ -47,28 +50,23 @@ class RoboGraph(nx.DiGraph):
 
 
     def build_adj_data(self) -> None:
-        # TODO: Find nicer representation for joint_ids than * -1
         body_joints = self.get_body_joints()
 
         # Add nodes
-        for body_id in body_joints.keys():
-            body_name = self.model.body(body_id).name
-            self.add_node(body_id, name=body_name, type="body")
+        for body_id in range(self.model.nbody):
+            self.add_node(self.body_namespace[body_id], name=self.model.body(body_id).name, type="body")
 
         for joint_id in range(self.model.njnt):
-            joint_name = self.model.joint(joint_id).name
-            self.add_node(-1 * joint_id, name=joint_name, type="joint")
+            self.add_node(self.jnt_namespace[joint_id], name=self.model.joint(joint_id).name, type="joint")
 
         for body_id, joints in body_joints.items():
-
-            parent_body = self.model.body_parentid[body_id]
+            parent_body_id = self.model.body_parentid[body_id]
             for joint_id in joints:
+                self.add_edge(self.jnt_namespace[joint_id], self.body_namespace[parent_body_id])
+                self.add_edge(self.body_namespace[parent_body_id], self.jnt_namespace[joint_id])
 
-                self.add_edge(-1 * joint_id, parent_body)
-                self.add_edge(parent_body, -1 * joint_id)
-
-                self.add_edge(-1 * joint_id, body_id)
-                self.add_edge(body_id, -1 * joint_id)
+                self.add_edge(self.jnt_namespace[joint_id], self.body_namespace[body_id])
+                self.add_edge(self.body_namespace[parent_body_id], self.jnt_namespace[joint_id])
 
         return self
 

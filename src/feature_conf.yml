@@ -3,6 +3,8 @@ joint_features:
     process: identity
   - name: range
     process: flatten
+  - name: stiffness
+    process: identity
 body_features:
   - name: pos
     process: flatten

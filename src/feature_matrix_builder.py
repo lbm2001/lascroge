@@ -43,7 +43,7 @@ class FeatureMatrixBuilder:
 
         # Pad features to generate matrix
         max_len = max(len(f_vec) for f_vec in all_features)
-        all_features_padded = [f + [0.0] * (max_len - len(f)) for f in all_features]
+        all_features_padded = [f + [0.0] * (max_len - len(f)) for f in all_features] #TODO: Ask nico if this makes sense
 
         return np.array(all_features_padded, dtype=np.float32)
 
@@ -63,7 +63,3 @@ class FeatureMatrixBuilder:
             feats.extend(processed)
 
         return feats
-    
-
-builder = FeatureMatrixBuilder("./data/mujoco_models/simple_robot.xml", "src/feature_conf.yml")
-builder.build_matrix()

@@ -195,3 +195,6 @@ cython_debug/
 
 data/*
 glso/data/*
+testing.py
+assets/*
+.vscode/

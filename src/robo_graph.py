@@ -18,9 +18,6 @@ class RoboGraph(nx.DiGraph):
     """
     def __init__(self, model_xml_path: str, feature_conf_path: str):
         super().__init__()
-        self.robot_name = os.path.splitext(os.path.basename(model_xml_path))[0] # Get filename without extension
-        
-
         # Build spec and model
         xml = Path(model_xml_path).read_text()
         self.spec = mujoco.MjSpec.from_string(xml)
@@ -79,28 +76,14 @@ class RoboGraph(nx.DiGraph):
         self.feature_matrix = self.feature_builder.build_matrix()
         
 
-
-    def save(self, save_dir: str) -> None:
-        """
-        Safes the adjacency matrix and features of the robot to the specified location.
-        """
-
+    def get_adjacency_matrix(self):
         if len(self.nodes) < 1:
             raise Exception("Graph was not yet built.")
+        return nx.to_numpy_array(self, nodelist=list(self.nodes()))
+    
 
-
-        p = Path(save_dir)
-        p.mkdir(parents=True, exist_ok=True)
-        save_path_adj_matrix = p / f"{self.robot_name}.npy"
-        save_path_features = p / f"{self.robot_name}_features.npy"
-
-        nodes = list(self.nodes())
-        adjacency_matrix = nx.to_numpy_array(self, nodelist=nodes)
-
-        np.save(str(save_path_adj_matrix), adjacency_matrix)
-        np.save(str(save_path_features), self.feature_matrix)
-
-        logging.info(f"Adjacency matrix and feature matrix saved in {p}")
+    def get_feature_matrix(self):
+        return self.feature_matrix
 
 
     def print_adj_matrix(self) -> None:

@@ -9,9 +9,8 @@ def main():
         help="Input MuJoCo XML file"
     )
     parser.add_argument(
-        "-c", "--conf",
-        required=True,
-        help="Path to YAML configuration file"
+        "-c", "--config",
+        help="Configuration for the features"
     )
     parser.add_argument(
         "-s", "--save",
@@ -21,7 +20,8 @@ def main():
 
     args = parser.parse_args()
 
-    rg = RoboGraph(model_xml_path=args.input, conf_path=args.conf).build()
+    rg = RoboGraph(model_xml_path=args.input, feature_conf_path=args.config)
+    rg.build()
     rg.save(save_dir=args.save)
 
 if __name__ == "__main__":

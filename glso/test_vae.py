@@ -5,7 +5,7 @@ from fast_jtnn import JTNNVAE, tensorize
 
 # --- Configuration ---
 MODEL_PATH = "results/model.iter-1000"  # Replace with your checkpoint path
-DATA_DIR = "data"               # Replace with your data directory
+DATA_DIR = "glso\data\robot_graphs"               # Replace with your data directory
 LATENT_SIZE = 28                             # Use the same as in training
 HIDDEN_SIZE = 450
 DEPTHT = 20
@@ -20,12 +20,15 @@ model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
 model.eval()
 
 # --- Load a sample input ---
-adj = np.load(os.path.join(DATA_DIR, "adj.npy"), allow_pickle=True)
-feat = np.load(os.path.join(DATA_DIR, "feat.npy"), allow_pickle=True)
+#adj = np.load(os.path.join(DATA_DIR, "adj.npy"), allow_pickle=True)
+#feat = np.load(os.path.join(DATA_DIR, "feat.npy"), allow_pickle=True)
+adj = np.load(os.path.join(DATA_DIR, "simple_robot.npy"), allow_pickle=True)
+feat = np.load(os.path.join(DATA_DIR, "simple_robot_features.npy"), allow_pickle=True)
 
 # Use the first sample for testing
 print("Adjacency matrix shape:", adj.shape)
 print("Feature matrix shape:", feat.shape)
+"""
 sample_attr = feat[0:1]
 sample_conn = adj[0:1]#
 print("Sample attribute shape:", sample_attr)
@@ -54,3 +57,4 @@ with torch.no_grad():
     print("Sampled output from latent space:", sampled)
     print("Latent vector (from input):", z_tree_vecs)
     print("Random latent vector (sampled):", z_sample)
+    """

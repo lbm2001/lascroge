@@ -1,6 +1,10 @@
 joint_features:
-  - range
+  - name: type
+    process: identity
+  - name: range
+    process: flatten
 body_features:
-  - pos
-  - mass
-  - inertia
+  - name: pos
+    process: flatten
+  - name: mass
+    process: identity

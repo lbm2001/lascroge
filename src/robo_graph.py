@@ -6,6 +6,8 @@ import numpy as np
 import logging
 import yaml
 from typing import Tuple
+import pandas as pd
+from feature_matrix_builder import FeatureMatrixBuilder
 
 class RoboGraph(nx.DiGraph):
     """
@@ -14,21 +16,19 @@ class RoboGraph(nx.DiGraph):
     Nodes represent joints (by index), with a 'name' attribute.
     Edges connect each joint to all joints of its parent body.
     """
-    def __init__(self, model_xml_path: str, conf_path: str):
+    def __init__(self, model_xml_path: str, feature_conf_path: str):
         super().__init__()
         self.robot_name = os.path.splitext(os.path.basename(model_xml_path))[0] # Get filename without extension
         
-        with open(conf_path, "r") as file:
-            self.conf = yaml.safe_load(file)
+        
 
         # Build spec and model
         xml = Path(model_xml_path).read_text()
         self.spec = mujoco.MjSpec.from_string(xml)
         self.model = self.spec.compile()
-        
-        # Attribute for the feature data
-        self.joint_features = None
-        self.body_features = None
+
+        self.feature_builder = FeatureMatrixBuilder(model_xml_path=model_xml_path, feature_conf_path=feature_conf_path)
+        self.feature_matrix = None
 
         
     def get_body_joints(self) -> None:
@@ -45,143 +45,100 @@ class RoboGraph(nx.DiGraph):
 
         return body_joints
 
-    def extract_feature_data(self) -> Tuple[list, list]:
-        """
-        Extracts features specified in the configuration yaml from the model and returns them.
-        """
-        joint_feat_names = self.conf["joint_features"]
-        body_feat_names = self.conf["body_features"]
-
-        joint_features = []
-        body_features = []
-
-        # Extract joint features
-        for joint_id in range(self.model.njnt):
-            joint = self.model.joint(joint_id)
-            feats = []
-
-            for feature_name in joint_feat_names: 
-                if hasattr(joint, feature_name):
-                    feature_value = getattr(joint, feature_name)
-                    feats.append(feature_value)
-                else:
-                    logging.warning(f"Feature '{feature_name}' not found for joint {joint.name}")
-            
-            joint_features.append(feats)
-        
-        # Extract link features
-        for body_id in range(self.model.nbody):
-            body = self.model.body(body_id)
-            feats = []
-
-            for feature_name in body_feat_names: 
-                if hasattr(body, feature_name):
-                    feature_value = getattr(body, feature_name)
-                    feats.append(feature_value)
-                else:
-                    logging.warning(f"Feature '{feature_name}' not found for body {body.name}")
-            
-            body_features.append(feats)
-        
-        return joint_features, body_features
-
-
-    def transform_feature_data(self, joint_features: list, body_features: list) -> Tuple[np.array, np.array]:
-        def flatten_features(features):
-            flat = []
-            for feat_list in features:
-                flat_row = []
-                for val in feat_list:
-                    if isinstance(val, (np.ndarray, list, tuple)):
-                        flat_row.extend(np.ravel(val).tolist())
-                    else:
-                        flat_row.append(val)
-                flat.append(flat_row)
-            return flat
-
-        flat_joint_features = flatten_features(joint_features)
-        flat_body_features = flatten_features(body_features)
-
-        return np.array(flat_joint_features), np.array(flat_body_features)
-
-
-    def build_feature_data(self) -> None:
-        """
-        Builds the features for joints and bodies and saves them in the class attribute.
-        """ 
-        joint_features_raw, body_features_raw = self.extract_feature_data()
-        joint_features_transformed, body_features_transformed = self.transform_feature_data(joint_features_raw, body_features_raw)
-        
-        self.joint_features = joint_features_transformed
-        self.body_features = body_features_transformed
-        return self
-
 
     def build_adj_data(self) -> None:
-        """
-        Populate the graph: for each non-root joint, add edges to all joints of its parent body (skips the world "body").
-        """
+        # TODO: Find nicer representation for joint_ids than * -1
         body_joints = self.get_body_joints()
 
-        for joint_id, body_id in enumerate(self.model.jnt_bodyid):
-            parent_body = self.model.body_parentid[body_id]
-            if parent_body == 0:
-                continue
+        # Add nodes
+        for body_id in body_joints.keys():
+            body_name = self.model.body(body_id).name
+            self.add_node(body_id, name=body_name, type="body")
 
+        for joint_id in range(self.model.njnt):
             joint_name = self.model.joint(joint_id).name
-            self.add_node(joint_id, name=joint_name)
+            self.add_node(-1 * joint_id, name=joint_name, type="joint")
 
-            for pbody_joint in body_joints[parent_body]:
-                parent_joint_name = self.model.joint(pbody_joint).name
-                self.add_node(pbody_joint, name=parent_joint_name)
-                self.add_edge(joint_id, pbody_joint)
+        for body_id, joints in body_joints.items():
+
+            parent_body = self.model.body_parentid[body_id]
+            for joint_id in joints:
+
+                self.add_edge(-1 * joint_id, parent_body)
+                self.add_edge(parent_body, -1 * joint_id)
+
+                self.add_edge(-1 * joint_id, body_id)
+                self.add_edge(body_id, -1 * joint_id)
+
         return self
-    
+
 
     def build(self) -> None:
         """
         Builds the model for saving it
         """
-        self.build_feature_data()
         self.build_adj_data()
+        self.feature_matrix = self.feature_builder.build_matrix()
+        
 
 
     def save(self, save_dir: str) -> None:
         """
-        Safes the adjacency matrix of the robot to the specified location.
+        Safes the adjacency matrix and features of the robot to the specified location.
         """
 
         if len(self.nodes) < 1:
             raise Exception("Graph was not yet built.")
 
-        #if self.joint_features == None:
-        if self.joint_features is None:
-            logging.warning("There are no joint features yet. The data will be saved anyway.")
-        
-        #if self.body_features == None:
-        if self.body_features is None:
-            logging.warning("There are no body features yet. The data will be saved anyway.")
-
 
         p = Path(save_dir)
-        if p.suffix:
-            save_path = p
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-        else:
-            p.mkdir(parents=True, exist_ok=True)
-            save_path = p / f"{self.robot_name}.npy"
+        p.mkdir(parents=True, exist_ok=True)
+        save_path_adj_matrix = p / f"{self.robot_name}.npy"
+        save_path_features = p / f"{self.robot_name}_features.npy"
 
         nodes = list(self.nodes())
         adjacency_matrix = nx.to_numpy_array(self, nodelist=nodes)
+
+        np.save(str(save_path_adj_matrix), adjacency_matrix)
+        np.save(str(save_path_features), self.feature_matrix)
+
+        logging.info(f"Adjacency matrix and feature matrix saved in {p}")
+
+
+    def print_adj_matrix(self) -> None:
+        """
+        Print the adjacency matrix of the graph with node names as labels.
+        """
+
+        if len(self.nodes) < 1:
+            raise Exception("Graph was not yet built.")
+
+        # Get the list of nodes and their names
+        nodes = list(self.nodes())
+        node_names = [self.nodes[node]["name"] for node in nodes]
+
+        # Generate the adjacency matrix
+        adjacency_matrix = nx.to_numpy_array(self, nodelist=nodes)
+
+        # Create a pandas DataFrame for better visualization
+        adj_df = pd.DataFrame(adjacency_matrix, index=node_names, columns=node_names)
+
+        print("Adjacency Matrix with Node Names:")
+        print(adj_df)
+    
+    def print_pastable_adj_matrix(self) -> None:
+        """
+        Prints the adjacency matrix ready to paste into: https://graphonline.top
+        """
+        if len(self.nodes) < 1:
+            raise Exception("Graph was not yet built.")
         
-        data = {
-            "adj_matrix": adjacency_matrix,
-            "joint_features": self.joint_features,
-            "body_features": self.body_features,
-            "joint_names": [self.nodes[n]["name"] for n in nodes],
-            "joint_ids": nodes,  # Ordered node IDs
-            "robot_name": self.robot_name,
-            "conf": self.conf  # Save original config
-        }
-        np.save(str(save_path), data)
-        logging.info(f"Adjacency matrix saved to {save_path}")
+        adjacency_matrix = nx.to_numpy_array(self).astype(int)
+        for row in adjacency_matrix:
+            print(",".join(map(str, row)))
+
+
+rt = RoboGraph(model_xml_path="glso/data/mujoco_models/simple_robot.xml", feature_conf_path="src/feature_conf.yml")
+rt.build()
+rt.print_pastable_adj_matrix()
+rt.save(save_dir="glso/data/mujoco_models/adjacency_matrices")

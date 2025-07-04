@@ -23,7 +23,7 @@ class GraphSaver():
         adjs = [graph for graph, _ in self.data]
         feats = [feat for _, feat in self.data]
 
-        np.save(str(save_path_adj_matrix), np.array(adjs, dtype=object))
+        np.save(str(save_path_adj_matrix), np.array(adjs, dtype=object)) #TODO: Check if this works
         np.save(str(save_path_features), np.array(feats, dtype=object))
 
         logging.info(f"Data saved in {p}")

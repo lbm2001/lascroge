@@ -6,6 +6,8 @@ import logging
 from robo_graph import RoboGraph
 from graph_saver import GraphSaver
 
+# Command for copy-pasting: python src/convert_mujoco_xml.py -i "/Users/lukasmueller/github/lascroge/data/mujoco_models" -s "/Users/lukasmueller/github/lascroge/data/robot_graphs" -c "/Users/lukasmueller/github/lascroge/src/feature_conf.yml"
+
 def main():
     parser = argparse.ArgumentParser(prog="convert_mujoco_xml.py")
     parser.add_argument(

@@ -155,8 +155,13 @@ feats2 = [
     [3, 5, 1]
 ]
 
+
+
 cur_conn = [np.array(adj1), np.array(adj2)] 
 cur_attr = [np.array(feats1), np.array(feats2)]
+
+curr_conn = np.load("/Users/lukasmueller/github/lascroge/data/robot_graphs/adj.npy", allow_pickle=True)
+curr_attr = np.load("/Users/lukasmueller/github/lascroge/data/robot_graphs/feat.npy", allow_pickle=True)
 
 batch = tensorize(cur_attr, cur_conn)
 

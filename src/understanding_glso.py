@@ -248,8 +248,26 @@ HIDDEN_SIZE = 3
 LATENT_SIZE = 28
 DEPTHT = 3
 ENCODING_METHOD = "average"
+MAX_NB = 4
 
 #==================== Helper functions and classes ======================
+
+def GRU(x, h_nei, W_z, W_r, U_r, W_h):
+    hidden_size = x.size()[-1]
+    sum_h = h_nei.sum(dim=1)
+    z_input = torch.cat([x,sum_h], dim=1)
+    z = torch.sigmoid(W_z(z_input))
+
+    r_1 = W_r(x).view(-1,1,hidden_size)
+    r_2 = U_r(h_nei)
+    r = torch.sigmoid(r_1 + r_2)
+    
+    gated_h = r * h_nei
+    sum_gated_h = gated_h.sum(dim=1)
+    h_input = torch.cat([x,sum_gated_h], dim=1)
+    pre_h = torch.tanh(W_h(h_input))
+    new_h = (1.0 - z) * sum_h + z * pre_h
+    return new_h
 
 class GraphGRU(nn.Module):
 
@@ -312,6 +330,13 @@ def rsample(z_vecs, W_mean, W_var):
     z_vecs = z_mean + torch.exp(z_log_var / 2) * epsilon
     return z_vecs, kl_loss
 
+def dfs(stack, x, fa_idx):
+    for y in x.neighbors:
+        if y.idx == fa_idx: continue
+        stack.append( (x,y,1) )
+        dfs(stack, y, x.idx)
+        stack.append( (y,x,0) )
+
 #===============#
 
 def encode(jtenc_holder):
@@ -350,8 +375,9 @@ def encode(jtenc_holder):
     return tree_vecs, messages
 
 
+tree_batch, jtenc_holder = batch
 
-res = encode(batch[1])
+res = encode(jtenc_holder)
 tree_vecs = res[0]
 messages = res[1]
 
@@ -360,217 +386,149 @@ T_Var = nn.Linear(HIDDEN_SIZE, LATENT_SIZE)
 
 z_tree_vecs, kl_div = rsample(z_vecs=tree_vecs, W_mean=T_mean, W_var=T_Var)
 
-print(z_tree_vecs)
+#=== TODO: FROM here we need to continue
+#=========== DECODER FORWARD ============
 
-FROM_CLAUDE = """
+def decoder_forward(mol_batch, x_tree_vecs):
+    pred_hiddens,pred_contexts,pred_targets = [],[],[]
+    stop_hiddens,stop_contexts,stop_targets = [],[],[]
+    traces = []
+    for mol_tree in mol_batch:
+        s = []
+        dfs(s, mol_tree.nodes[0], -1)
+        traces.append(s)
+        for node in mol_tree.nodes:
+            node.neighbors = []
 
+    #Predict Root
+    batch_size = len(mol_batch)
+    pred_hiddens.append(create_var_int(torch.zeros(len(mol_batch),HIDDEN_SIZE)))
+    pred_targets.extend([mol_tree.nodes[0].nid for mol_tree in mol_batch])
+    pred_contexts.append( create_var_int( torch.LongTensor(range(batch_size)) ) )
 
+    max_iter = max([len(tr) for tr in traces])
+    padding = create_var_int(torch.zeros(HIDDEN_SIZE), False)
+    h = {}
 
+    # Create a batch of input
+    # All the neighbors are set to [] initially
+    # Max_nb: max neighbor
+    for t in range(max_iter):
+        prop_list = []
+        batch_list = []
+        for i,plist in enumerate(traces):
+            if t < len(plist):
+                prop_list.append(plist[t])
+                batch_list.append(i)
 
-import torch
-from torch.autograd import Variable
-import torch.nn as nn
-import numpy as np
+        cur_x = []
+        cur_h_nei,cur_o_nei = [],[]
 
-# Helper function for advanced indexing
-def index_select_ND(source, dim, index):
-    index_size = index.size()
-    suffix_dim = source.size()[1:]
-    final_size = index_size + suffix_dim
-    target = source.index_select(dim, index.view(-1))
-    return target.view(final_size)
+        for node_x, real_y, _ in prop_list:
+            #Neighbors for message passing (target not included)
+            cur_nei = [h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors if node_y.idx != real_y.idx]
+            pad_len = MAX_NB - len(cur_nei)
+            cur_h_nei.extend(cur_nei)
+            cur_h_nei.extend([padding] * pad_len)
 
-# GraphGRU: Custom GRU implementation for graph message passing
-class GraphGRU(nn.Module):
-    def __init__(self, input_size, hidden_size, depth):
-        super(GraphGRU, self).__init__()
-        self.hidden_size = hidden_size
-        self.input_size = input_size
-        self.depth = depth  # Number of message passing iterations
+            #Neighbors for stop prediction (all neighbors)
+            cur_nei = [h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors]
+            pad_len = MAX_NB - len(cur_nei)
+            cur_o_nei.extend(cur_nei)
+            cur_o_nei.extend([padding] * pad_len)
 
-        # GRU gates: z = update gate, r = reset gate, h = candidate hidden state
-        self.W_z = nn.Linear(input_size + hidden_size, hidden_size)  # Update gate weights
-        self.W_r = nn.Linear(input_size, hidden_size, bias=False)    # Reset gate weights (input part)
-        self.U_r = nn.Linear(hidden_size, hidden_size)               # Reset gate weights (hidden part)
-        self.W_h = nn.Linear(input_size + hidden_size, hidden_size)  # Candidate hidden state weights
+            #Current clique embedding
+            cur_x.append(node_x.nid)
 
-    def forward(self, h, x, mess_graph):
-        # h: current hidden states for all messages [n_messages, hidden_size]
-        # x: input features for all messages [n_messages, hidden_size]
-        # mess_graph: adjacency matrix for message-to-message connections [n_messages, max_neighbors]
+        #Clique embedding
+        cur_x = create_var_int(torch.LongTensor(cur_x))
+        cur_x = cur_x  # Skip embedding for now 
+        
+        #Message passing
+        cur_h_nei = torch.stack(cur_h_nei, dim=0).view(-1,MAX_NB,HIDDEN_SIZE)
+        # Skip GRU for now - would need to initialize GRU weights
+        new_h = cur_x  # Simplified placeholder
 
-        # Create mask to ignore padding (first message is always padding)
-        mask = torch.ones(h.size(0), 1)
-        mask[0] = 0  # First message is padding, so mask it out
-        if torch.cuda.is_available():
-            mask = mask.cuda()
+        #Node Aggregate
+        cur_o_nei = torch.stack(cur_o_nei, dim=0).view(-1,MAX_NB,HIDDEN_SIZE)
+        cur_o = cur_o_nei.sum(dim=1)
 
-        # Iterate through message passing steps
-        for it in range(self.depth):
-            # Gather neighboring hidden states for each message using index_select_ND
-            # mess_graph[i] contains indices of neighboring messages for message i
-            h_nei = index_select_ND(h, 0, mess_graph)  # [n_messages, max_neighbors, hidden_size]
-            sum_h = h_nei.sum(dim=1)  # Sum over neighbors [n_messages, hidden_size]
+        #Gather targets
+        pred_target,pred_list = [],[]
+        stop_target = []
+        for i,m in enumerate(prop_list):
+            node_x,node_y,direction = m
+            x,y = node_x.idx,node_y.idx
+            h[(x,y)] = new_h[i]
+            node_y.neighbors.append(node_x)
+            if direction == 1:
+                pred_target.append(node_y.nid)
+                pred_list.append(i) 
+            stop_target.append(direction)
 
-            # Update gate: decides how much of the new candidate to accept
-            z_input = torch.cat([x, sum_h], dim=1)  # Concatenate input and neighbor sum
-            z = torch.sigmoid(self.W_z(z_input))    # Update gate values [0,1]
+        #Hidden states for stop prediction
+        cur_batch = create_var_int(torch.LongTensor(batch_list))
+        stop_hidden = torch.cat([cur_x.unsqueeze(0) if cur_x.dim() == 0 else cur_x, cur_o], dim=1)
+        stop_hiddens.append( stop_hidden )
+        stop_contexts.append( cur_batch )
+        stop_targets.extend( stop_target )
+        
+        #Hidden states for clique prediction
+        if len(pred_list) > 0:
+            batch_list = [batch_list[i] for i in pred_list]
+            cur_batch = create_var_int(torch.LongTensor(batch_list))
+            pred_contexts.append( cur_batch )
 
-            # Reset gate: decides how much of the previous hidden state to forget
-            r_1 = self.W_r(x).view(-1, 1, self.hidden_size)  # Input contribution
-            r_2 = self.U_r(h_nei)                            # Hidden state contribution
-            r = torch.sigmoid(r_1 + r_2)                     # Reset gate values [0,1]
+            cur_pred = create_var_int(torch.LongTensor(pred_list))
+            pred_hiddens.append( new_h.index_select(0, cur_pred) )
+            pred_targets.extend( pred_target )
 
-            # Apply reset gate to neighbor hidden states
-            gated_h = r * h_nei
-            sum_gated_h = gated_h.sum(dim=1)
+    #Last stop at root
+    cur_x,cur_o_nei = [],[]
+    for mol_tree in mol_batch:
+        node_x = mol_tree.nodes[0]
+        cur_x.append(node_x.nid)
+        cur_nei = [h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors]
+        pad_len = MAX_NB - len(cur_nei)
+        cur_o_nei.extend(cur_nei)
+        cur_o_nei.extend([padding] * pad_len)
 
-            # Candidate hidden state: new information to potentially add
-            h_input = torch.cat([x, sum_gated_h], dim=1)
-            pre_h = torch.tanh(self.W_h(h_input))
+    cur_x = create_var_int(torch.LongTensor(cur_x))
+    cur_x = cur_x
+    cur_o_nei = torch.stack(cur_o_nei, dim=0).view(-1,MAX_NB,HIDDEN_SIZE)
+    cur_o = cur_o_nei.sum(dim=1)
 
-            # Final hidden state: interpolation between old and new
-            h = (1.0 - z) * sum_h + z * pre_h
-            h = h * mask  # Apply mask to ignore padding
+    stop_hidden = torch.cat([cur_x.unsqueeze(0) if cur_x.dim() == 0 else cur_x, cur_o], dim=1)
+    stop_hiddens.append( stop_hidden )
+    stop_contexts.append( create_var_int( torch.LongTensor(range(batch_size)) ) )
+    stop_targets.extend( [0] * len(mol_batch) )
 
-        return h
+    #Predict next clique
+    pred_contexts = torch.cat(pred_contexts, dim=0)
+    pred_hiddens = torch.cat(pred_hiddens, dim=0)
+    # Skip prediction for now - would need aggregate and pred_loss functions
+    pred_scores = pred_hiddens  # Simplified placeholder
+    pred_targets = create_var_int(torch.LongTensor(pred_targets))
 
-# JTNNEncoder: Main encoder class that processes tensorized graphs
-class JTNNEncoder(nn.Module):
-    def __init__(self, hidden_size, depth, embedding, encoding_method):
-        super(JTNNEncoder, self).__init__()
-        self.hidden_size = hidden_size
-        self.depth = depth
-        self.embedding = embedding  # Embedding layer for node features
-        self.encoding_method = encoding_method  # "root", "sum", or "average"
+    pred_loss = torch.tensor(0.0)  # Simplified placeholder
+    _,preds = torch.max(pred_scores, dim=1)
+    pred_acc = torch.eq(preds, pred_targets).float()
+    pred_acc = torch.sum(pred_acc) / pred_targets.nelement()
 
-        # Output network: combines node features with aggregated messages
-        self.outputNN = nn.Sequential(
-            nn.Linear(2 * hidden_size, hidden_size),  # 2x because we concat node + message features
-            nn.ReLU()
-        )
+    #Predict stop
+    stop_contexts = torch.cat(stop_contexts, dim=0)
+    stop_hiddens = torch.cat(stop_hiddens, dim=0)
+    # Skip stop prediction for now - would need U_i, aggregate and stop_loss functions
+    stop_scores = stop_hiddens.mean(dim=1)  # Simplified placeholder
+    stop_targets = create_var_float(torch.Tensor(stop_targets))
+    
+    stop_loss = torch.tensor(0.0)  # Simplified placeholder
+    stops = torch.ge(stop_scores, 0).float()
+    stop_acc = torch.eq(stops, stop_targets).float()
+    stop_acc = torch.sum(stop_acc) / stop_targets.nelement()
 
-        # GraphGRU for message passing
-        self.GRU = GraphGRU(hidden_size, hidden_size, depth=depth)
-
-    def forward(self, fnode, fmess, node_graph, mess_graph, scope, leafs):
-        # fnode: node features [n_nodes, feature_dim]
-        # fmess: message source node indices [n_messages]
-        # node_graph: incoming message indices for each node [n_nodes, max_incoming]
-        # mess_graph: neighboring message indices for each message [n_messages, max_neighbors]
-        # scope: list of (start_idx, num_nodes) for each graph in batch
-        # leafs: list of leaf node indices for each graph
-
-        # Convert to Variables (for older PyTorch versions)
-        if torch.cuda.is_available():
-            fnode = fnode.cuda()
-            fmess = fmess.cuda()
-            node_graph = node_graph.cuda()
-            mess_graph = mess_graph.cuda()
-
-        # Initialize message hidden states
-        messages = torch.zeros(mess_graph.size(0), self.hidden_size)
-        if torch.cuda.is_available():
-            messages = messages.cuda()
-
-        # Step 1: Embed node features
-        fnode = self.embedding(fnode)  # [n_nodes, hidden_size]
-
-        # Step 2: Create initial message features from source nodes
-        fmess = index_select_ND(fnode, 0, fmess)  # [n_messages, hidden_size] - gather source node features
-
-        # Step 3: Run message passing with GraphGRU
-        messages = self.GRU(messages, fmess, mess_graph)  # [n_messages, hidden_size]
-
-        # Step 4: Aggregate messages for each node
-        mess_nei = index_select_ND(messages, 0, node_graph)  # [n_nodes, max_incoming, hidden_size]
-
-        # Step 5: Combine node features with aggregated messages
-        node_vecs = torch.cat([fnode, mess_nei.sum(dim=1)], dim=-1)  # [n_nodes, 2*hidden_size]
-        node_vecs = self.outputNN(node_vecs)  # [n_nodes, hidden_size]
-
-        # Step 6: Pool node representations into graph-level representations
-        batch_vecs = []
-
-        if self.encoding_method == "root":
-            # Use the root node (first node) representation for each graph
-            for st, le in scope:
-                cur_vecs = node_vecs[st]  # Root is the first node
-                batch_vecs.append(cur_vecs)
-        else:
-            # Use leaf nodes for pooling
-            for leaf in leafs:
-                cur_vecs = torch.zeros_like(node_vecs[0])
-                for node_idx in leaf:
-                    cur_vecs += node_vecs[node_idx]
-
-                if self.encoding_method == "average":
-                    cur_vecs /= len(leaf)  # Average over leaf nodes
-                elif self.encoding_method == "sum":
-                    pass  # Already summed above
-                else:
-                    raise ValueError(f"Unknown encoding method: {self.encoding_method}")
-
-                batch_vecs.append(cur_vecs)
-
-        # Stack individual graph representations into batch
-        tree_vecs = torch.stack(batch_vecs, dim=0)  # [batch_size, hidden_size]
-        return tree_vecs, messages
-
-# JTNNVAE: Complete VAE model with encoder/decoder
-class JTNNVAE(nn.Module):
-    def __init__(self, vocab_size, hidden_size, latent_size, depth, encoding_method):
-        super(JTNNVAE, self).__init__()
-        self.hidden_size = hidden_size
-        self.latent_size = latent_size
-
-        # Encoder component
-        self.jtnn = JTNNEncoder(
-            hidden_size=hidden_size,
-            depth=depth,
-            embedding=nn.Embedding(vocab_size, hidden_size),
-            encoding_method=encoding_method
-        )
-
-        # Variational layers: map from hidden representation to latent space
-        self.T_mean = nn.Linear(hidden_size, latent_size)  # Mean of latent distribution
-        self.T_var = nn.Linear(hidden_size, latent_size)   # Log variance of latent distribution
-
-    def encode(self, jtenc_holder):
-        # jtenc_holder is the tuple returned by tensorize(): (fnode, fmess, node_graph, mess_graph, scope, leafs)
-        tree_vecs, tree_mess = self.jtnn(*jtenc_holder)
-        return tree_vecs, tree_mess
-
-    def encode_latent(self, x_batch):
-        # Encode to latent space with mean and variance
-        jtenc_holder = x_batch[1]  # Assuming x_batch is (data, jtenc_holder)
-        tree_vecs, _ = self.jtnn(*jtenc_holder)
-
-        # Compute mean and log variance for variational encoding
-        tree_mean = self.T_mean(tree_vecs)
-        tree_var = -torch.abs(self.T_var(tree_vecs))  # Negative absolute value for log variance
-
-        return tree_mean, tree_var
-
-    def rsample(self, z_vecs, W_mean, W_var):
-        # Reparameterization trick for variational sampling
-        batch_size = z_vecs.size(0)
-        z_mean = W_mean(z_vecs)
-        z_log_var = -torch.abs(W_var(z_vecs))  # Following Mueller et al.
-
-        # Compute KL divergence: KL(q(z|x) || p(z)) where p(z) = N(0,I)
-        kl_loss = -0.5 * torch.sum(1.0 + z_log_var - z_mean * z_mean - torch.exp(z_log_var)) / batch_size
-
-        # Sample from latent distribution using reparameterization trick
-        epsilon = torch.randn_like(z_mean)
-        if torch.cuda.is_available():
-            epsilon = epsilon.cuda()
-        z_vecs = z_mean + torch.exp(z_log_var / 2) * epsilon
-
-        return z_vecs, kl_loss
+    return pred_loss, stop_loss, pred_acc.item(), stop_acc.item()
 
 
 
-
-
-"""
+#word_loss, topo_loss, word_acc, topo_acc = decode(x_batch, z_tree_vecs)

@@ -4,6 +4,7 @@ import torch.nn as nn  # Neural network layers and functions
 import numpy as np  # Numerical computing library
 import torch.nn.functional as F
 
+torch.manual_seed(42)
 # Mod Tree: Graph structures in Memory before they get converted to tensors
 # Assign attributes
 
@@ -411,9 +412,11 @@ U_i = nn.Linear(2 * HIDDEN_SIZE, HIDDEN_SIZE)
 W_o = nn.Linear(HIDDEN_SIZE, feature_dim)  # Output layer for clique prediction
 U_o = nn.Linear(HIDDEN_SIZE, 1)  # Output layer for stop prediction
 
+#features_to_dim = nn.Linear(feature_dim, HIDDEN_SIZE)  #ÄÄÄ Wieso verändert das das Ergebnis ??? Aufeinmal 6 Nodes
+
 #Loss functions
-pred_loss = nn.MSELoss(reduction='sum')
-stop_loss = nn.BCEWithLogitsLoss(reduction='sum')
+pred_loss_nn = nn.MSELoss(reduction='sum')
+stop_loss_nn = nn.BCEWithLogitsLoss(reduction='sum')
 
 def aggregate(hiddens, contexts, x_tree_vecs, mode):
     if mode == 'features': # Renamed from 'word'
@@ -430,7 +433,8 @@ def aggregate(hiddens, contexts, x_tree_vecs, mode):
 
 
 #=========== DECODER FORWARD ============
-
+# mol_batch - List of ModTrees in batch,
+# x_tree_vecs - encoded tree representation (from latent space)
 def decoder_forward(mol_batch, x_tree_vecs):
     pred_hiddens,pred_contexts,pred_targets = [],[],[]
     stop_hiddens,stop_contexts,stop_targets = [],[],[]
@@ -445,13 +449,13 @@ def decoder_forward(mol_batch, x_tree_vecs):
 
     #Predict Root
     batch_size = len(mol_batch)
-    pred_hiddens.append(create_var_int(torch.zeros(len(mol_batch),HIDDEN_SIZE)))
-    pred_targets.extend([mol_tree.nodes[0].features for mol_tree in mol_batch])
-    pred_contexts.append( create_var_int( torch.LongTensor(range(batch_size)) ) )
+    pred_hiddens.append(create_var_int(torch.zeros(len(mol_batch),HIDDEN_SIZE))) # Initial hidden states are zeros (no previous context)
+    pred_targets.extend([mol_tree.nodes[0].features for mol_tree in mol_batch]) #Actual features of root nodes
+    pred_contexts.append( create_var_int( torch.LongTensor(range(batch_size)) ) ) # Maps each prediction to its corresponding tree in the batch
 
-    max_iter = max([len(tr) for tr in traces])
-    padding = create_var_int(torch.zeros(HIDDEN_SIZE), False)
-    h = {}
+    max_iter = max([len(tr) for tr in traces]) # Maximum number of steps needed (longest trace in batch)
+    padding = create_var_int(torch.zeros(HIDDEN_SIZE), False) # Zero vector used for padding when nodes have fewer neighbors
+    h = {} #Dictionary to store hidden states between node pairs: h[(from_node, to_node)]
 
     # Create a batch of input
     # All the neighbors are set to [] initially
@@ -463,7 +467,7 @@ def decoder_forward(mol_batch, x_tree_vecs):
         for i,plist in enumerate(traces):
             if t < len(plist):
                 prop_list.append(plist[t])
-                batch_list.append(i)
+                batch_list.append(i) # Keep track of which tree each active node belongs to
 
         cur_x = []
         cur_h_nei,cur_o_nei = [],[]
@@ -471,36 +475,35 @@ def decoder_forward(mol_batch, x_tree_vecs):
         #Process each active node
         for node_x, real_y, _ in prop_list:
             #Neighbors for message passing (target not included)
-            cur_nei = [h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors if node_y.idx != real_y.idx]
-            pad_len = MAX_NB - len(cur_nei) # Was soll MAX_NB sein !!!
+            cur_nei = [h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors if node_y.idx != real_y.idx] #For each active node, collect neighbor hidden states
+            pad_len = MAX_NB - len(cur_nei) # Pad to fixed size MAX_NB (maximum neighbors) for batch processing
             cur_h_nei.extend(cur_nei)
             cur_h_nei.extend([padding] * pad_len)
 
             #Neighbors for stop prediction (all neighbors)
-            cur_nei = [h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors]
+            cur_nei = [h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors] #Stop prediction: Include ALL neighbors (different from message passing)
             pad_len = MAX_NB - len(cur_nei) # Was soll MAX_NB sein !!!
             cur_o_nei.extend(cur_nei)
             cur_o_nei.extend([padding] * pad_len)
 
             #Current clique embedding
-            cur_x.append(node_x.features)  
+            cur_x.append(node_x.features) #Node features: Collect current node's features
 
         # Convert features to tensor (no embedding needed)
         #cur_x = torch.tensor(cur_x, dtype=torch.float32)
         #if torch.cuda.is_available():
         #    cur_x = cur_x.cuda()
         #Clique embedding
-        cur_x = create_var_int(torch.LongTensor(cur_x))
+        cur_x = create_var_int(torch.FloatTensor(np.array(cur_x)))
         cur_x = cur_x  # Skip embedding for now 
         
         #Message passing
         cur_h_nei = torch.stack(cur_h_nei, dim=0).view(-1,MAX_NB,HIDDEN_SIZE)
-        # Skip GRU for now - would need to initialize GRU weights
-        new_h = GRU(cur_x, cur_h_nei, W_z, W_r, U_r, W_h)  # Simplified placeholder
+        new_h = GRU(cur_x, cur_h_nei, W_z, W_r, U_r, W_h) #GRU message passing: Update hidden states using GRU with neighbor information
 
         #Node Aggregate
         cur_o_nei = torch.stack(cur_o_nei, dim=0).view(-1,MAX_NB,HIDDEN_SIZE) # Was soll MAX_NB sein !!!
-        cur_o = cur_o_nei.sum(dim=1)
+        cur_o = cur_o_nei.sum(dim=1) #Aggregation: Sum neighbor hidden states for stop prediction
 
         #Gather targets
         pred_target,pred_list = [],[]
@@ -508,12 +511,12 @@ def decoder_forward(mol_batch, x_tree_vecs):
         for i,m in enumerate(prop_list):
             node_x,node_y,direction = m
             x,y = node_x.idx,node_y.idx
-            h[(x,y)] = new_h[i]
-            node_y.neighbors.append(node_x)
-            if direction == 1:
-                pred_target.append(node_y.features)
-                pred_list.append(i) 
-            stop_target.append(direction)
+            h[(x,y)] = new_h[i] #Hidden state storage: Store computed hidden states for later use
+            node_y.neighbors.append(node_x) #Neighbor building: Incrementally build neighbor connections
+            if direction == 1: # If this is a forward step in DFS
+                pred_target.append(node_y.features) # Target Features: Collect features that need to be predicted
+                pred_list.append(i) # Which nodes need prediction
+            stop_target.append(direction) #Stop targets: Collect stop decisions (1=continue, 0=stop)
 
         #Hidden states for stop prediction
         cur_batch = create_var_int(torch.LongTensor(batch_list))
@@ -521,14 +524,14 @@ def decoder_forward(mol_batch, x_tree_vecs):
         stop_hidden = torch.cat([cur_x, cur_o], dim=1) #Woher stammt unsqueeze(0)? !!!
         stop_hiddens.append( stop_hidden )
         stop_contexts.append( cur_batch )
-        stop_targets.extend( stop_target )
+        stop_targets.extend( stop_target ) #Stop data: Store hidden states, contexts, and targets for stop prediction
         
         #Hidden states for clique prediction
         if len(pred_list) > 0:
             batch_list = [batch_list[i] for i in pred_list]
             cur_batch = create_var_int(torch.LongTensor(batch_list))
             pred_contexts.append( cur_batch )
-
+            #Prediction data: Store hidden states, contexts, and targets for feature prediction
             cur_pred = create_var_int(torch.LongTensor(pred_list))
             pred_hiddens.append( new_h.index_select(0, cur_pred) )
             pred_targets.extend( pred_target )
@@ -562,34 +565,41 @@ def decoder_forward(mol_batch, x_tree_vecs):
     #Predict next clique
     pred_contexts = torch.cat(pred_contexts, dim=0)
     pred_hiddens = torch.cat(pred_hiddens, dim=0)
-    # Skip prediction for now - would need aggregate and pred_loss functions
-    pred_scores = aggregate(pred_hiddens, pred_contexts, x_tree_vecs, 'features')  # Simplified placeholder
+    pred_scores = aggregate(pred_hiddens, pred_contexts, x_tree_vecs, 'features')  # Feature prediction: Use aggregate function to predict node features
     
     # Convert pred_targets to tensor for regression
     #pred_targets = torch.tensor(pred_targets, dtype=torch.float32)
-    pred_targets = create_var_int(torch.LongTensor(pred_targets))
+    pred_targets = create_var_int(torch.FloatTensor(pred_targets)) #was LongTensor before
 
-    pred_loss = pred_loss(pred_scores, pred_targets) / len(mol_batch)  # Simplified placeholder
+
+    pred_loss = pred_loss_nn(pred_scores, pred_targets) / len(mol_batch) #Loss calculation: Compute regression loss for feature prediction
+
+    distnace_threshold = 10  # Define a threshold for distance
+    distances = torch.norm(pred_scores - pred_targets, dim=1)  # Calculate distances
+    pred_acc = torch.mean((distances < distnace_threshold).float())  # Calculate accuracy based on distance threshold, The percentage of predicted node features that are "close enough" to the true node features (within a distance threshold).
+    print(f"pred_scores shape: {pred_scores.shape}, pred_targets shape: {pred_targets.shape}")
+    print(f"Average prediction distance: {torch.mean(distances).item():.4f}")
+    """
     _,preds = torch.max(pred_scores, dim=1)
+    print(f"preds shape: {preds.shape}, pred_targets shape: {pred_targets.shape}")
     pred_acc = torch.eq(preds, pred_targets).float()
     pred_acc = torch.sum(pred_acc) / pred_targets.nelement()
+    """
 
     #Predict stop
     stop_contexts = torch.cat(stop_contexts, dim=0)
     stop_hiddens = torch.cat(stop_hiddens, dim=0)
     stop_hiddens = F.relu(U_i(stop_hiddens) )
-    stop_scores = aggregate(stop_hiddens, stop_contexts, x_tree_vecs, 'stop')
+    stop_scores = aggregate(stop_hiddens, stop_contexts, x_tree_vecs, 'stop') #Stop prediction: Use aggregate function to predict stop decisions
     stop_scores = stop_scores.squeeze(-1)  # Simplified placeholder
     stop_targets = create_var_float(torch.Tensor(stop_targets))
     
-    stop_loss = stop_loss(stop_scores, stop_targets) / len(mol_batch)  
-    stops = torch.ge(stop_scores, 0).float()
-    stop_acc = torch.eq(stops, stop_targets).float()
-    stop_acc = torch.sum(stop_acc) / stop_targets.nelement()
+    stop_loss = stop_loss_nn(stop_scores, stop_targets) / len(mol_batch)  
+    stops = torch.ge(stop_scores, 0).float() #checks if each score is ≥ 0; If score ≥ 0 → decision is 1 (continue expanding) , If score < 0 → decision is 0 (stop expanding)
+    stop_acc = torch.eq(stops, stop_targets).float() #compares each prediction with the correct answer; .float() converts to 1.0 (correct) or 0.0 (incorrect)
+    stop_acc = torch.sum(stop_acc) / stop_targets.nelement() #The percentage of nodes where the model correctly predicted whether to stop or continue expanding that branch.
 
     return pred_loss, stop_loss, pred_acc.item(), stop_acc.item()
-
-
 
 #word_loss, topo_loss, word_acc, topo_acc = decode(x_batch, z_tree_vecs)
 MAX_DECODE_LEN = 100
@@ -599,7 +609,7 @@ def decoder_decode(x_tree_vecs, prob_decode):
         stack = []
         init_hiddens = create_var_int( torch.zeros(1, HIDDEN_SIZE) )
         zero_pad = create_var_int(torch.zeros(1,1,HIDDEN_SIZE))
-        contexts = create_var_int( torch.LongTensor(1).zero_() )
+        contexts = create_var_int( torch.LongTensor(1).zero_() ) #!!! Macht der Zero Vector hier sinn?
 
         #Root Prediction
         root_features = aggregate(init_hiddens, contexts, x_tree_vecs, 'features')
@@ -623,13 +633,22 @@ def decoder_decode(x_tree_vecs, prob_decode):
 
             #cur_x = create_var_int(torch.LongTensor([node_x.features]))  wichtig
             #cur_x = cur_x  # Skip embedding for now
-            cur_x = torch.tensor(node_x.features, dtype=torch.float32)#.unsqueeze(0)
+            #cur_x = torch.tensor(node_x.features, dtype=torch.float32)#.unsqueeze(0)
             #cur_x = cur_x.squeeze(0)
             # if torch.cuda.is_available():
             #    cur_x = cur_x.cuda()
+                    # Convert node features to tensor and project to hidden size
+            if isinstance(node_x.features, torch.Tensor):
+                cur_x = node_x.features.clone().detach()
+                if cur_x.dim() == 1:
+                    cur_x = cur_x.unsqueeze(0)
+            else:
+                cur_x = torch.tensor(node_x.features, dtype=torch.float32).unsqueeze(0)
 
+            
             #Predict stop
             cur_h = cur_h_nei.sum(dim=1)
+            print(f"Step {step}: cur_x shape: {cur_x.shape}, cur_h shape: {cur_h.shape}")
             # Debug: Print shapes to identify the exact issue
             print(f"cur_x shape: {cur_x.shape}")
             print(f"cur_h shape: {cur_h.shape}")
@@ -637,14 +656,15 @@ def decoder_decode(x_tree_vecs, prob_decode):
             stop_hiddens = torch.cat([cur_x,cur_h], dim=1)
             stop_hiddens = F.relu(U_i(stop_hiddens) )
             stop_score = aggregate(stop_hiddens, contexts, x_tree_vecs, 'stop')
-
+            print(f"Step {step}: stop_score = {stop_score.item()}")
             if prob_decode:
                 backtrack = (torch.bernoulli( torch.sigmoid(stop_score) ).item() == 0)
             else:
                 backtrack = (stop_score.item() < 0)
                 # print(f'step = {step}, backtrack = {backtrack}, stopscore = {stop_score}')
-
+            print(f"Step {step}: Normal logic, backtrack = {backtrack}")
             if not backtrack: #Forward: Predict next clique
+                print(f"Step {step}: Moving forward, predicting new node")
                 new_h = GRU(cur_x, cur_h_nei, W_z, W_r, U_r, W_h)
                 pred_features = aggregate(new_h, contexts, x_tree_vecs, 'features')
                 """
@@ -681,12 +701,16 @@ def decoder_decode(x_tree_vecs, prob_decode):
                 node_y = TreeNode(predicted_features)
                 node_y.idx = len(all_nodes)
                 node_y.neighbors.append(node_x)
+                node_x.neighbors.append(node_y)  #ÄÄÄ später hinzugefügt
                 h[(node_x.idx,node_y.idx)] = new_h[0]
                 stack.append( (node_y, None) )
                 all_nodes.append(node_y)
+                print(f"Step {step}: Created new node {node_y.idx} with features {predicted_features}")
 
             if backtrack: #Backtrack, use if instead of else
+                print(f"Step {step}: Backtracking")
                 if len(stack) == 1:
+                    print(f"Step {step}: At root, terminating")
                     break #At root, terminate
 
                 node_fa,_ = stack[-2]
@@ -700,6 +724,7 @@ def decoder_decode(x_tree_vecs, prob_decode):
                 h[(node_x.idx,node_fa.idx)] = new_h[0]
                 node_fa.neighbors.append(node_x)
                 stack.pop()
+                print(f"Step {step}: Popped from stack, now at node {stack[-1][0].idx}")
 
         return root, all_nodes
 
@@ -715,19 +740,27 @@ tree_batch, jtenc_holder = batch
 res = encode(jtenc_holder)
 tree_vecs = res[0]
 messages = res[1]
-print("Encoded tree vectors shape:", tree_vecs.shape)
+#print("Encoded tree vectors shape:", tree_vecs.shape)
 
 
 z_tree_vecs, kl_div = rsample(z_vecs=tree_vecs, W_mean=T_mean, W_var=T_Var)
-
+print("tree_batch: ", [tree_batch[i].nodes for i in range(len(tree_batch))])
 print("Encoded tree vectors shape:", z_tree_vecs.shape)
 print(z_tree_vecs)
 
 pls = decoder_decode(z_tree_vecs, prob_decode=True)  # prob_decode=False for greedy decoding
 #pred_loss, stop_loss, pred_acc, stop_acc = pls
+
 print("Decoded tree structure:")
 decoded_tree, all_nodes = pls
 print(f"Decoded tree root: {decoded_tree.features}")
 print(f"Number of nodes in decoded tree: {len(all_nodes)}")
 print("All nodes in decoded tree:")
 print(pls)
+
+
+asd = decoder_forward(tree_batch, z_tree_vecs)
+pred_loss, stop_loss, pred_acc, stop_acc = asd
+print(f"Prediction Loss: {pred_loss.item()}, Stop Loss: {stop_loss.item()}")
+print(f"Prediction Accuracy: {pred_acc}, Stop Accuracy: {stop_acc}")
+

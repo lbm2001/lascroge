@@ -160,8 +160,8 @@ feats2 = [
 cur_conn = [np.array(adj1), np.array(adj2)] 
 cur_attr = [np.array(feats1), np.array(feats2)]
 
-curr_conn = np.load("/Users/lukasmueller/github/lascroge/data/robot_graphs/adj.npy", allow_pickle=True)
-curr_attr = np.load("/Users/lukasmueller/github/lascroge/data/robot_graphs/feat.npy", allow_pickle=True)
+#curr_conn = np.load("/Users/lukasmueller/github/lascroge/data/robot_graphs/adj.npy", allow_pickle=True)
+#curr_attr = np.load("/Users/lukasmueller/github/lascroge/data/robot_graphs/feat.npy", allow_pickle=True)
 
 batch = tensorize(cur_attr, cur_conn)
 
@@ -386,6 +386,7 @@ T_Var = nn.Linear(HIDDEN_SIZE, LATENT_SIZE)
 
 z_tree_vecs, kl_div = rsample(z_vecs=tree_vecs, W_mean=T_mean, W_var=T_Var)
 
+
 #=== TODO: FROM here we need to continue
 #=========== DECODER FORWARD ============
 
@@ -393,6 +394,8 @@ def decoder_forward(mol_batch, x_tree_vecs):
     pred_hiddens,pred_contexts,pred_targets = [],[],[]
     stop_hiddens,stop_contexts,stop_targets = [],[],[]
     traces = []
+    
+    # Traces saves the nodes in the order we visited them during DFS
     for mol_tree in mol_batch:
         s = []
         dfs(s, mol_tree.nodes[0], -1)
@@ -403,7 +406,7 @@ def decoder_forward(mol_batch, x_tree_vecs):
     #Predict Root
     batch_size = len(mol_batch)
     pred_hiddens.append(create_var_int(torch.zeros(len(mol_batch),HIDDEN_SIZE)))
-    pred_targets.extend([mol_tree.nodes[0].nid for mol_tree in mol_batch])
+    pred_targets.extend([mol_tree.nodes[0].features for mol_tree in mol_batch])
     pred_contexts.append( create_var_int( torch.LongTensor(range(batch_size)) ) )
 
     max_iter = max([len(tr) for tr in traces])
@@ -413,18 +416,20 @@ def decoder_forward(mol_batch, x_tree_vecs):
     # Create a batch of input
     # All the neighbors are set to [] initially
     # Max_nb: max neighbor
-    for t in range(max_iter):
+    for t in range(max_iter): # Max iterations = biggest trace
         prop_list = []
         batch_list = []
         for i,plist in enumerate(traces):
             if t < len(plist):
                 prop_list.append(plist[t])
                 batch_list.append(i)
-
+        # prop list is the traces flattened and ordered by "step number"
         cur_x = []
         cur_h_nei,cur_o_nei = [],[]
 
+        # Process each DFS step
         for node_x, real_y, _ in prop_list:
+            # node_x : From where we are going, node_y : Where we are going
             #Neighbors for message passing (target not included)
             cur_nei = [h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors if node_y.idx != real_y.idx]
             pad_len = MAX_NB - len(cur_nei)
@@ -438,7 +443,7 @@ def decoder_forward(mol_batch, x_tree_vecs):
             cur_o_nei.extend([padding] * pad_len)
 
             #Current clique embedding
-            cur_x.append(node_x.nid)
+            cur_x.append(node_x.features)
 
         #Clique embedding
         cur_x = create_var_int(torch.LongTensor(cur_x))
@@ -531,4 +536,6 @@ def decoder_forward(mol_batch, x_tree_vecs):
 
 
 
-#word_loss, topo_loss, word_acc, topo_acc = decode(x_batch, z_tree_vecs)
+word_loss, topo_loss, word_acc, topo_acc = decoder_forward(tree_batch, z_tree_vecs)
+
+print(word_loss)

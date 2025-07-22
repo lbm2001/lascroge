@@ -3,7 +3,7 @@ import mujoco
 import numpy as np
 import logging
 from pathlib import Path
-from feature_processor import FeatureProcessor
+from preprocessing.feature_processor import FeatureProcessor
 
 
 class FeatureMatrixBuilder:

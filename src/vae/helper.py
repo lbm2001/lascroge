@@ -1,6 +1,7 @@
 import torch
 from torch.autograd import Variable
 import torch.nn as nn 
+import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -35,6 +36,77 @@ class ModTree(object):
 
     def size(self): 
         return len(self.nodes) 
+
+
+def tensorize(attr, conn): 
+    tree_batch = [] 
+    for idx in range(len(attr)): 
+        mod_tree = ModTree(attr[idx], conn[idx])  
+        tree_batch.append(mod_tree) 
+
+    tot = 0  
+    for mod_tree in tree_batch: 
+        for node in mod_tree.nodes:  
+            node.idx = tot  
+            tot += 1  
+
+    
+    node_batch = []  
+    scope = []  
+    leaf = []  
+    for tree in tree_batch:  
+        scope.append((len(node_batch), len(tree.nodes)))  
+        
+        node_batch.extend(tree.nodes)  
+
+        tree_leaf = []  
+        
+        for node in tree.nodes:  
+            if len(node.neighbors) == 1: 
+                tree_leaf.append(node.idx)  
+        leaf.append(tree_leaf)  
+    
+    
+    messages,mess_dict = [None],{}
+    fnode = []
+    for x in node_batch: 
+        fnode.append(x.features) 
+        for y in x.neighbors:
+            mess_dict[(x.idx,y.idx)] = len(messages) 
+            messages.append( (x,y) )
+
+    
+    
+
+    node_graph = [[] for i in range(len(node_batch))] 
+    mess_graph = [[] for i in range(len(messages))] 
+    fmess = [0] * len(messages) 
+
+    for x,y in messages[1:]:  
+        mid1 = mess_dict[(x.idx,y.idx)]  
+        fmess[mid1] = x.idx  
+        node_graph[y.idx].append(mid1)  
+        for z in y.neighbors:  
+            if z.idx == x.idx: continue  
+            mid2 = mess_dict[(y.idx,z.idx)]  
+            mess_graph[mid2].append(mid1)  
+            
+    max_len = max([len(t) for t in node_graph] + [1]) 
+    for t in node_graph:
+        pad_len = max_len - len(t)
+        t.extend([0] * pad_len)
+
+    max_len = max([len(t) for t in mess_graph] + [1])
+    for t in mess_graph:
+        pad_len = max_len - len(t)
+        t.extend([0] * pad_len)
+
+    mess_graph = torch.LongTensor(mess_graph)
+    node_graph = torch.LongTensor(node_graph)
+    fmess = torch.LongTensor(fmess)
+    fnode = torch.LongTensor(np.array(fnode)) 
+    return tree_batch, (fnode, fmess, node_graph, mess_graph, scope, leaf)
+
 
 def GRU(x, h_nei, W_z, W_r, U_r, W_h):
     hidden_size = x.size()[-1]

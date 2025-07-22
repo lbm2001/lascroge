@@ -7,7 +7,7 @@ import logging
 import yaml
 from typing import Tuple
 import pandas as pd
-from feature_matrix_builder import FeatureMatrixBuilder
+from preprocessing.feature_matrix_builder import FeatureMatrixBuilder
 
 class RoboGraph(nx.DiGraph):
     """

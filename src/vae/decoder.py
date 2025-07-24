@@ -18,6 +18,7 @@ class NodePredictionData(object):
         self.targets = []
         self.contexts = []
 
+
 class StopPredictionData(object):
 
     def __init__(self):
@@ -48,6 +49,130 @@ class DFSHandler(object):
             stack.append( (x,y,1) )
             depth_first_search(stack, y, x.idx)
             stack.append( (y,x,0) )
+
+
+class TracesHandler(object):
+
+    def __init__(self, tree_batch):
+        
+        self.tree_batch = tree_batch
+
+        dfs_handler = DFSHandler()
+        self.traces = dfs_handler.get_traces(tree_batch)
+
+        self.longest_trace = max([len(tr) for tr in self.traces])
+        self.batch_size = len(self.tree_batch)
+        self.current_batch_list = []
+
+        self.node_prediction_data = NodePredictionData()
+        self.stop_prediction_data = StopPredictionData()
+        self.hidden_states_directed_edges = {}
+    
+    def _setup_root_prediction(self):
+        self.node_prediction_data.hidden_states.append(create_var_int(torch.zeros(self.batch_size,))) # Initial hidden states for root prediction
+        self.node_prediction_data.targets.extend([tree.nodes[0].features for tree in self.tree_batch]) # Root nodes features
+        self.node_prediction_data.contexts.append( create_var_int( torch.LongTensor(range(self.batch_size)) ) ) # Creates batch indices
+    
+    def _collect_steps(self, step_number):
+        """Collects all steps at the current DFS step across all trees"""
+        current_steps = []
+        tree_indices = []
+
+        for tree_index, trace in enumerate(self.traces):
+            if step_number < len(trace):
+                current_steps.append(trace[step_number])
+
+        return current_steps, tree_indices
+
+    def _process_dfs_step_node_prediction(self, current_dfs_steps, padding, update_gate_linear, reset_gate_input_linear, reset_gate_neighbor_linear, candidate_hidden_linear):
+        node_prediction_neighbor_hidden_states = []
+        node_features = []
+
+        for source_node, target_node, _ in current_dfs_steps:
+            #Neighbors for message passing (target not included)
+            neighbor_hidden_states_wo_target = [self.hidden_states_directed_edges[(neighbor.idx, source_node.idx)] for neighbor in source_node.neighbors if neighbor.idx != target_node.idx]
+            node_prediction_neighbor_hidden_states.extend(neighbor_hidden_states_wo_target)
+            node_prediction_neighbor_hidden_states.extend([padding] * (MAX_NB - len(neighbor_hidden_states_wo_target)))
+
+            node_features.append(source_node.features)
+        
+        node_prediction_neighbor_hidden_states = torch.stack(node_prediction_neighbor_hidden_states, dim=0).view(-1,MAX_NB,self.hidden_size)
+        node_features = create_var_float(torch.LongTensor(node_features))
+
+        new_hidden_states = GRU(node_features, node_prediction_neighbor_hidden_states, update_gate_linear, reset_gate_input_linear, reset_gate_neighbor_linear, candidate_hidden_linear)
+
+        self._update_graph(current_dfs_steps, new_hidden_states)
+
+        node_prediction_targets, node_prediction_list, _ = self._collect_prediction_targets(current_dfs_steps)
+
+        if len(node_prediction_list) > 0:
+                batch_list = [self.current_batch_list[i] for i in node_prediction_list]
+                self.node_prediction_data.contexts.append( create_var_int(torch.LongTensor(batch_list)) )
+
+                cur_pred = create_var_int(torch.LongTensor(node_prediction_list))
+                self.node_prediction_data.hidden_states.append( new_hidden_states.index_select(0, cur_pred) )
+                self.node_prediction_data.targets.extend( node_prediction_targets )
+
+    def _process_dfs_step_stop_prediction(self, current_dfs_steps, padding):
+        
+        stop_prediction_neighbor_hidden_states = []
+        node_features = []
+
+        #Neighbors for stop prediction (all neighbors)
+        for source_node, _, _ in current_dfs_steps:
+            neighbor_hidden_states = [self.hidden_states_directed_edges[(node_y.idx,source_node.idx)] for node_y in source_node.neighbors]
+            stop_prediction_neighbor_hidden_states.extend(neighbor_hidden_states)
+            stop_prediction_neighbor_hidden_states.extend([padding] * (MAX_NB - len(neighbor_hidden_states)))
+
+            node_features.append(source_node.features)
+            
+        # Node aggregate
+        stop_prediction_neighbor_hidden_states = torch.stack(stop_prediction_neighbor_hidden_states, dim=0).view(-1,MAX_NB,self.hidden_size).sum(dim=1)
+        node_features = create_var_float(torch.LongTensor(node_features))
+
+        _, _, stop_target = self._collect_prediction_targets(current_dfs_steps)
+
+        #Hidden states for stop prediction
+        cur_batch = create_var_int(torch.LongTensor(self.current_batch_list))
+        stop_hidden = torch.cat([node_features, stop_prediction_neighbor_hidden_states], dim=1)
+        self.stop_prediction_data.hidden_states.append( stop_hidden )
+        self.stop_prediction_data.contexts.append( cur_batch )
+        self.stop_prediction_data.targets.extend( stop_target )
+
+    def _collect_prediction_targets(self, current_dfs_steps):
+        node_prediction_targets = []
+        node_prediction_list = []
+        stop_target = []
+
+        for i, step in enumerate(current_dfs_steps):
+            _, target_node, direction = step
+            if direction == 1:
+                node_prediction_targets.append(target_node.nid)
+                node_prediction_list.append(i) 
+            stop_target.append(direction)
+        
+        return node_prediction_targets, node_prediction_list, stop_target
+
+    def _update_graph(self, current_dfs_steps, new_hidden_states):
+        for i, step in enumerate(current_dfs_steps):
+            source_node, target_node, _ = step
+            self.hidden_states_directed_edges[(source_node.idx ,target_node.idx)] = new_hidden_states[i]
+            target_node.neighbors.append(source_node)
+
+    def process(self, hidden_size, update_gate_linear, reset_gate_input_linear, reset_gate_neighbor_linear, candidate_hidden_linear):
+
+        self._setup_root_prediction()
+
+        padding = create_var_int(torch.zeros(self.hidden_size), False)
+
+        for step_number in range(self.longest_trace):
+
+            current_dfs_steps, tree_indices = self._collect_steps(step_number)
+            self.current_batch_list = tree_indices
+            self._process_dfs_step_node_prediction(current_dfs_steps, padding)
+            self._process_dfs_step_stop_prediction(current_dfs_steps, padding)
+
+            
 
 
 class Decoder(nn.Module):
@@ -92,62 +217,7 @@ class Decoder(nn.Module):
         return V_o(output_vec)
 
 
-    def _generate_dfs_traces(self, tree_data):
-        traces = []
-        for tree in tree_data:
-                dfs_stack = []
-                depth_first_search(dfs_stack, tree.nodes[0], -1)
-                traces.append(dfs_stack)
-                for node in tree.nodes:
-                    node.neighbors = []
-        return traces
 
-
-    def _process_dfs_step(self, 
-                          current_dfs_step_nodes, 
-                          hidden_states_directed_edges, 
-                          padding,):
-        """
-        Collects data from neighboring nodes for node prediction, stop prediction as well as the features and stores them in lists.
-        """
-        node_prediction_neighbor_hidden_states = []
-        stop_prediction_neighbor_hidden_states = []
-        node_features = []
-
-        for source_node, target_node, _ in current_dfs_step_nodes:
-
-            #Neighbors for message passing (target not included)
-            neighbor_hidden_states_wo_target = [hidden_states_directed_edges[(node_y.idx,source_node.idx)] for node_y in source_node.neighbors if node_y.idx != target_node.idx]
-            node_prediction_neighbor_hidden_states.extend(neighbor_hidden_states_wo_target)
-            node_prediction_neighbor_hidden_states.extend([padding] * (MAX_NB - len(neighbor_hidden_states_wo_target)))
-
-            #Neighbors for stop prediction (all neighbors)
-            neighbor_hidden_states = [hidden_states_directed_edges[(node_y.idx,source_node.idx)] for node_y in source_node.neighbors]
-            stop_prediction_neighbor_hidden_states.extend(neighbor_hidden_states)
-            stop_prediction_neighbor_hidden_states.extend([padding] * (MAX_NB - len(neighbor_hidden_states)))
-
-            # Collect node features
-            node_features.append(source_node.features)
-
-        return (node_prediction_neighbor_hidden_states, 
-                stop_prediction_neighbor_hidden_states, 
-                node_features,)
-
-
-    def _collect_nodes_at_step(self, traces, step_number):
-        """Collect all nodes at the given DFS step across all trees"""
-        current_step_nodes = []
-        tree_indices = []
-
-        for tree_index, trace in enumerate(traces):
-            if step_number < len(trace):
-                current_step_nodes.append(trace[step_number])
-                tree_indices.append(tree_index)
-
-        return current_step_nodes, tree_indices
-
-
-    def _collect_prediction_targets(self, current_dfs_step_nodes):
             pred_target = []
             pred_list = []
             stop_target = []
@@ -161,90 +231,13 @@ class Decoder(nn.Module):
             
             return pred_target, pred_list, stop_target
 
+    def forward(self, tree_data, latent_space_tree_vecs):
 
-    def _process_dfs_traces(self, traces, tree_data, latent_space_tree_vecs):
         
-        # Setup
-        # Data for node prediction
-        node_prediction_data = NodePredictionData()
-        stop_prediction_data = StopPredictionData()
+        traces_handler = TracesHandler(tree_data)
+        traces_handler.process(self.hidden_size, self.update_gate_linear, self.reset_gate_neighbor_linear, self.reset_gate_input_linear, self.cand)
         
-        batch_size = len(tree_data)
-        
-        # Setup for root
-        node_prediction_data.hidden_states.append(create_var_int(torch.zeros(len(tree_data),))) # Initial hidden states for root prediction
-        node_prediction_data.targets.extend([tree.nodes[0].features for tree in tree_data]) # Root nodes features
-        node_prediction_data.contexts.append( create_var_int( torch.LongTensor(range(batch_size)) ) ) # Creates batch indices
-
-        longest_trace = max([len(tr) for tr in traces])
-        padding = create_var_int(torch.zeros(self.hidden_size), False)
-        hidden_states_directed_edges = {}
-
-
-        for step_number in range(longest_trace): # Max iterations = biggest trace
-            
-            current_dfs_step_nodes, tree_batch_indices = self._collect_nodes_at_step(traces=traces, step_number=step_number)
-
-            node_prediction_neighbor_hidden_states, stop_prediction_neighbor_hidden_states, node_features = self._process_dfs_step(
-                current_dfs_step_nodes=current_dfs_step_nodes,
-                hidden_states_directed_edges=hidden_states_directed_edges,
-                padding=padding,
-            )
-            
-            # Create var from features
-            node_features = create_var_float(torch.LongTensor(node_features))
-
-            #Message passing
-            node_prediction_neighbor_hidden_states = torch.stack(node_prediction_neighbor_hidden_states, dim=0).view(-1,MAX_NB,self.hidden_size)
-            new_hidden_states = node_prediction_data.hidden_states
-            #new_hidden_states = GRU(node_features, node_prediction_neighbor_hidden_states, self.update_gate_linear, self.reset_gate_input_linear, self.reset_gate_neighbor_linear, self.candidate_hidden_linear)
-
-            #Node Aggregate
-            stop_prediction_neighbor_hidden_states = torch.stack(stop_prediction_neighbor_hidden_states, dim=0).view(-1,MAX_NB,self.hidden_size).sum(dim=1)
-
-            #Gather targets
-            pred_target, pred_list, stop_target = self._collect_prediction_targets(current_dfs_step_nodes=current_dfs_step_nodes)
-
-            # Update graph structure
-            for i, step in enumerate(current_dfs_step_nodes):
-                source_node, target_node, _ = step
-                hidden_states_directed_edges[(source_node.idx ,target_node.idx)] = new_hidden_states[i]
-                target_node.neighbors.append(source_node)
-
-
-            #Hidden states for stop prediction
-            cur_batch = create_var_int(torch.LongTensor(tree_batch_indices))
-            stop_hidden = torch.cat([node_features, stop_prediction_neighbor_hidden_states], dim=1)
-            stop_prediction_data.hidden_states.append( stop_hidden )
-            stop_prediction_data.contexts.append( cur_batch )
-            stop_prediction_data.targets.extend( stop_target )
-            
-            #Hidden states for clique prediction
-            if len(pred_list) > 0:
-                tree_batch_indices = [tree_batch_indices[i] for i in pred_list]
-                cur_batch = create_var_int(torch.LongTensor(tree_batch_indices))
-                node_prediction_data.contexts.append( cur_batch )
-
-                cur_pred = create_var_int(torch.LongTensor(pred_list))
-                node_prediction_data.hidden_states.append( new_hidden_states.index_select(0, cur_pred) )
-                node_prediction_data.targets.extend( pred_target )
-            
-            return  (node_prediction_data,
-                     stop_prediction_data, 
-                     hidden_states_directed_edges)
-
-
-    def forward(self, tree_data, latent_space_tree_vecs):        
-        #  Traces saves the nodes in the order we visited them during DFS
-        traces = self._generate_dfs_traces(tree_data)
-        
-        node_prediction_data, stop_prediction_data, hidden_states_directed_edges = self._process_dfs_traces(traces=traces, 
-                                                                tree_data=tree_data, 
-                                                                latent_space_tree_vecs=latent_space_tree_vecs)
-
-        padding = create_var_int(torch.zeros(self.hidden_size), False)
-        batch_size = len(tree_data)
-
+        return
         #Last stop at root
         cur_x = []
         cur_o_nei = []

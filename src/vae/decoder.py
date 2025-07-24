@@ -5,10 +5,50 @@ Modified based on https://github.com/wengong-jin/icml18-jtnn.git.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from helper import create_var_int, create_var_float, GRU, ModTree, TreeNode
+from helper import create_var_int, create_var_float, depth_first_search, GRU, ModTree, TreeNode
 
 MAX_NB = 4
 MAX_DECODE_LEN = 100
+
+
+class NodePredictionData(object):
+
+    def __init__(self):
+        self.hidden_states = []
+        self.targets = []
+        self.contexts = []
+
+class StopPredictionData(object):
+
+    def __init__(self):
+        self.hidden_states = []
+        self.targets = []
+        self.contexts = []
+
+
+class DFSHandler(object):
+
+    def __init__(self):
+        self.traces = []
+
+
+    def get_traces(self, trees):
+        for tree in trees:
+            dfs_stack = []
+            self.run_dfs(dfs_stack, tree.nodes[0], -1)
+            self.traces.append(dfs_stack)
+            for node in tree.nodes:
+                node.neighbors = []
+        return self.traces
+
+
+    def run_dfs(stack, x, fa_idx):
+        for y in x.neighbors:
+            if y.idx == fa_idx: continue
+            stack.append( (x,y,1) )
+            depth_first_search(stack, y, x.idx)
+            stack.append( (y,x,0) )
+
 
 class Decoder(nn.Module):
 
@@ -17,10 +57,10 @@ class Decoder(nn.Module):
         self.hidden_size = hidden_size
 
         #GRU Weights
-        self.W_z = nn.Linear(2 * hidden_size, hidden_size)
-        self.U_r = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.W_r = nn.Linear(hidden_size, hidden_size)
-        self.W_h = nn.Linear(2 * hidden_size, hidden_size)
+        self.update_gate_linear = nn.Linear(5 + self.hidden_size, hidden_size) # TODO: Change sizes here
+        self.reset_gate_neighbor_linear = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.reset_gate_input_linear = nn.Linear(5, hidden_size) # TODO: Change sizes here
+        self.candidate_hidden_linear = nn.Linear(2 * hidden_size, hidden_size)
 
         #Word Prediction Weights 
         self.W = nn.Linear(hidden_size + latent_size, hidden_size)
@@ -107,33 +147,41 @@ class Decoder(nn.Module):
         return current_step_nodes, tree_indices
 
 
+    def _collect_prediction_targets(self, current_dfs_step_nodes):
+            pred_target = []
+            pred_list = []
+            stop_target = []
+
+            for i, step in enumerate(current_dfs_step_nodes):
+                _, target_node, direction = step
+                if direction == 1:
+                    pred_target.append(target_node.nid)
+                    pred_list.append(i) 
+                stop_target.append(direction)
+            
+            return pred_target, pred_list, stop_target
+
+
     def _process_dfs_traces(self, traces, tree_data, latent_space_tree_vecs):
         
         # Setup
         # Data for node prediction
-        node_prediction_hidden_states = []
-        node_prediction_targets = []
-        node_prediction_contexts = [] 
+        node_prediction_data = NodePredictionData()
+        stop_prediction_data = StopPredictionData()
         
-        # Data for stop prediction
-        stop_prediction_hidden_states = []
-        stop_prediction_targets = []
-        stop_prediction_contexts = []
-
         batch_size = len(tree_data)
         
         # Setup for root
-        node_prediction_hidden_states.append(create_var_int(torch.zeros(len(tree_data),))) # Initial hidden states for root prediction
-        node_prediction_targets.extend([tree.nodes[0].features for tree in tree_data]) # Root nodes features
-        node_prediction_contexts.append( create_var_int( torch.LongTensor(range(batch_size)) ) ) # Creates batch indices
+        node_prediction_data.hidden_states.append(create_var_int(torch.zeros(len(tree_data),))) # Initial hidden states for root prediction
+        node_prediction_data.targets.extend([tree.nodes[0].features for tree in tree_data]) # Root nodes features
+        node_prediction_data.contexts.append( create_var_int( torch.LongTensor(range(batch_size)) ) ) # Creates batch indices
 
         longest_trace = max([len(tr) for tr in traces])
-        max_iterations = longest_trace
         padding = create_var_int(torch.zeros(self.hidden_size), False)
         hidden_states_directed_edges = {}
 
 
-        for step_number in range(max_iterations): # Max iterations = biggest trace
+        for step_number in range(longest_trace): # Max iterations = biggest trace
             
             current_dfs_step_nodes, tree_batch_indices = self._collect_nodes_at_step(traces=traces, step_number=step_number)
 
@@ -143,52 +191,46 @@ class Decoder(nn.Module):
                 padding=padding,
             )
             
+            # Create var from features
+            node_features = create_var_float(torch.LongTensor(node_features))
+
             #Message passing
             node_prediction_neighbor_hidden_states = torch.stack(node_prediction_neighbor_hidden_states, dim=0).view(-1,MAX_NB,self.hidden_size)
-            new_hidden_states = GRU(node_features, node_prediction_neighbor_hidden_states, self.W_z, self.W_r, self.U_r, self.W_h)
+            new_hidden_states = node_prediction_data.hidden_states
+            #new_hidden_states = GRU(node_features, node_prediction_neighbor_hidden_states, self.update_gate_linear, self.reset_gate_input_linear, self.reset_gate_neighbor_linear, self.candidate_hidden_linear)
 
-            # TODO: Continue here
             #Node Aggregate
-            stop_prediction_neighbor_hidden_states = torch.stack(stop_prediction_neighbor_hidden_states, dim=0).view(-1,MAX_NB,self.hidden_size)
-            cur_o = stop_prediction_neighbor_hidden_states.sum(dim=1)
+            stop_prediction_neighbor_hidden_states = torch.stack(stop_prediction_neighbor_hidden_states, dim=0).view(-1,MAX_NB,self.hidden_size).sum(dim=1)
 
             #Gather targets
-            pred_target = []
-            pred_list = []
-            stop_target = []
+            pred_target, pred_list, stop_target = self._collect_prediction_targets(current_dfs_step_nodes=current_dfs_step_nodes)
 
+            # Update graph structure
             for i, step in enumerate(current_dfs_step_nodes):
-                source_node, target_node, direction = step
+                source_node, target_node, _ = step
                 hidden_states_directed_edges[(source_node.idx ,target_node.idx)] = new_hidden_states[i]
                 target_node.neighbors.append(source_node)
-                if direction == 1:
-                    pred_target.append(target_node.nid)
-                    pred_list.append(i) 
-                stop_target.append(direction)
+
 
             #Hidden states for stop prediction
             cur_batch = create_var_int(torch.LongTensor(tree_batch_indices))
-            stop_hidden = torch.cat([node_features, cur_o], dim=1)
-            stop_prediction_hidden_states.append( stop_hidden )
-            stop_prediction_contexts.append( cur_batch )
-            stop_prediction_targets.extend( stop_target )
+            stop_hidden = torch.cat([node_features, stop_prediction_neighbor_hidden_states], dim=1)
+            stop_prediction_data.hidden_states.append( stop_hidden )
+            stop_prediction_data.contexts.append( cur_batch )
+            stop_prediction_data.targets.extend( stop_target )
             
             #Hidden states for clique prediction
             if len(pred_list) > 0:
                 tree_batch_indices = [tree_batch_indices[i] for i in pred_list]
                 cur_batch = create_var_int(torch.LongTensor(tree_batch_indices))
-                node_prediction_contexts.append( cur_batch )
+                node_prediction_data.contexts.append( cur_batch )
 
                 cur_pred = create_var_int(torch.LongTensor(pred_list))
-                node_prediction_hidden_states.append( new_hidden_states.index_select(0, cur_pred) )
-                node_prediction_targets.extend( pred_target )
+                node_prediction_data.hidden_states.append( new_hidden_states.index_select(0, cur_pred) )
+                node_prediction_data.targets.extend( pred_target )
             
-            return  (node_prediction_hidden_states, 
-                     node_prediction_targets, 
-                     node_prediction_contexts, 
-                     stop_prediction_hidden_states, 
-                     stop_prediction_targets, 
-                     stop_prediction_contexts, 
+            return  (node_prediction_data,
+                     stop_prediction_data, 
                      hidden_states_directed_edges)
 
 
@@ -196,17 +238,16 @@ class Decoder(nn.Module):
         #  Traces saves the nodes in the order we visited them during DFS
         traces = self._generate_dfs_traces(tree_data)
         
-        node_prediction_hidden_states, node_prediction_contexts, node_prediction_targets, expansion_stop_hidden_states, expansion_stop_contexts, expansion_stop_targets, hidden_states_directed_edges = self._process_dfs_traces(traces=traces, 
+        node_prediction_data, stop_prediction_data, hidden_states_directed_edges = self._process_dfs_traces(traces=traces, 
                                                                 tree_data=tree_data, 
                                                                 latent_space_tree_vecs=latent_space_tree_vecs)
 
         padding = create_var_int(torch.zeros(self.hidden_size), False)
         batch_size = len(tree_data)
 
-        return 
-
         #Last stop at root
-        cur_x,cur_o_nei = [],[]
+        cur_x = []
+        cur_o_nei = []
         for mol_tree in tree_data:
             node_x = mol_tree.nodes[0]
             cur_x.append(node_x.nid)
@@ -216,47 +257,38 @@ class Decoder(nn.Module):
             cur_o_nei.extend([padding] * pad_len)
 
         cur_x = create_var_int(torch.LongTensor(cur_x))
-        cur_x = cur_x
+        cur_x = cur_x # This was embedding
         cur_o_nei = torch.stack(cur_o_nei, dim=0).view(-1,MAX_NB,self.hidden_size)
         cur_o = cur_o_nei.sum(dim=1)
 
-        stop_hidden = torch.cat([cur_x.unsqueeze(0) if cur_x.dim() == 0 else cur_x, cur_o], dim=1)
-        expansion_stop_hidden_states.append( stop_hidden )
-        expansion_stop_contexts.append( create_var_int( torch.LongTensor(range(batch_size)) ) )
-        expansion_stop_targets.extend( [0] * len(tree_data) )
+        stop_prediction_data.hidden_states.append( torch.cat([cur_x,cur_o], dim=1) )
+        stop_prediction_data.contexts.append( create_var_int( torch.LongTensor(range(batch_size)) ) )
+        stop_prediction_data.targets.extend( [0] * len(tree_data) )
 
         #Predict next clique
-        node_prediction_contexts = torch.cat(node_prediction_contexts, dim=0)
-        node_prediction_hidden_states = torch.cat(node_prediction_hidden_states, dim=0)
-        # Skip prediction for now - would need aggregate and pred_loss functions
-        pred_scores = node_prediction_hidden_states  # Simplified placeholder
-        node_prediction_targets = create_var_int(torch.LongTensor(node_prediction_targets))
+        node_prediction_data.contexts = torch.cat(node_prediction_data.contexts, dim=0)
+        node_prediction_data.hidden_states = torch.cat(node_prediction_data.hidden_states, dim=0)
+        pred_scores = node_prediction_data.hidden_states   # Skip prediction for now - would need aggregate and pred_loss functions -> Simplified placeholder
+        node_prediction_data.targets = create_var_int(torch.LongTensor(node_prediction_data.targets))
 
         pred_loss = torch.tensor(0.0)  # Simplified placeholder
         _,preds = torch.max(pred_scores, dim=1)
-        pred_acc = torch.eq(preds, node_prediction_targets).float()
-        pred_acc = torch.sum(pred_acc) / node_prediction_targets.nelement()
+        pred_acc = torch.eq(preds, node_prediction_data.targets).float()
+        pred_acc = torch.sum(pred_acc) / node_prediction_data.targets.nelement()
 
         #Predict stop
-        expansion_stop_contexts = torch.cat(expansion_stop_contexts, dim=0)
-        expansion_stop_hidden_states = torch.cat(expansion_stop_hidden_states, dim=0)
+        stop_prediction_data.contexts = torch.cat(stop_prediction_data.contexts, dim=0)
+        stop_prediction_data.hidden_states = torch.cat(stop_prediction_data.hidden_states, dim=0)
         # Skip stop prediction for now - would need U_i, aggregate and stop_loss functions
-        stop_scores = expansion_stop_hidden_states.mean(dim=1)  # Simplified placeholder
-        expansion_stop_targets = create_var_float(torch.Tensor(expansion_stop_targets))
+        stop_scores = stop_prediction_data.hidden_states.mean(dim=1)  # Simplified placeholder
+        stop_prediction_data.targets = create_var_float(torch.Tensor(stop_prediction_data.targets))
         
         stop_loss = torch.tensor(0.0)  # Simplified placeholder
         stops = torch.ge(stop_scores, 0).float()
-        stop_acc = torch.eq(stops, expansion_stop_targets).float()
-        stop_acc = torch.sum(stop_acc) / expansion_stop_targets.nelement()
+        stop_acc = torch.eq(stops, stop_prediction_data.targets).float()
+        stop_acc = torch.sum(stop_acc) / stop_prediction_data.targets.nelement()
 
         return pred_loss, stop_loss, pred_acc.item(), stop_acc.item()
 
-"""
-Helper Functions:
-"""
-def depth_first_search(stack, x, fa_idx):
-    for y in x.neighbors:
-        if y.idx == fa_idx: continue
-        stack.append( (x,y,1) )
-        depth_first_search(stack, y, x.idx)
-        stack.append( (y,x,0) )
+
+

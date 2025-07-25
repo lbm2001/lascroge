@@ -1,17 +1,7 @@
 import torch 
-from torch.autograd import Variable 
 import torch.nn as nn 
-import numpy as np
+from helper import create_var_float, create_var_int, index_select_ND, GraphGRU
 
-from helper import ModTree, create_var_float, create_var_int, index_select_ND, GraphGRU
-
-
-HIDDEN_SIZE = 8
-LATENT_SIZE = 28
-DEPTHT = 3
-ENCODING_METHOD = "average"
-
-torch.manual_seed(42)
 
 class Encoder(nn.Module):
 
@@ -22,10 +12,13 @@ class Encoder(nn.Module):
         self.depth = depth
         self.encoding_method = encoding_method
         
+        self.mean_neural_network = nn.Linear(self.hidden_size, self.latent_size)
+        self.var_neural_network = nn.Linear(self.hidden_size, self.latent_size)
+        self.output_nn = nn.Sequential(nn.Linear(2 * self.hidden_size, self.hidden_size), nn.ReLU())
+        
 
     def encode(self, encoding_holder):
-
-        fnode, fmess, node_graph, mess_graph, scope, leafs = encoding_holder
+        fnode, fmess, node_graph, mess_graph, _, leafs = encoding_holder
 
         
         fnode = create_var_float(fnode)
@@ -36,13 +29,12 @@ class Encoder(nn.Module):
 
         fnode = fnode 
         fmess = index_select_ND(fnode, 0, fmess)
-        gru = GraphGRU(fnode.shape[1], self.hidden_size, self.depth)
+        gru = GraphGRU(self.hidden_size, self.hidden_size, self.depth)
         messages = gru.forward(messages, fmess, mess_graph)
 
         mess_nei = index_select_ND(messages, 0, node_graph)
         node_vecs = torch.cat([fnode, mess_nei.sum(dim=1)], dim=1)
-        outputNN = nn.Sequential(nn.Linear((fnode.shape[1] + self.hidden_size), self.hidden_size), nn.ReLU())
-        node_vecs = outputNN(node_vecs)
+        node_vecs = self.output_nn(node_vecs)
         
         batch_vecs = []
         for leaf in leafs: 
@@ -59,12 +51,12 @@ class Encoder(nn.Module):
         return tree_vecs, messages 
     
 
-    def rsample(self, z_vecs, mean_network, var_network): 
+    def rsample(self, z_vecs): 
 
         batch_size = z_vecs.size(0)
-        z_mean = mean_network(z_vecs) 
+        z_mean = self.mean_neural_network(z_vecs) 
         
-        z_log_var = -torch.abs(var_network(z_vecs)) 
+        z_log_var = -torch.abs(self.var_neural_network(z_vecs)) 
         
         kl_loss = -0.5 * torch.sum(1.0 + z_log_var - z_mean * z_mean - torch.exp(z_log_var)) / batch_size 
         epsilon = create_var_float(torch.randn_like(z_mean)) 

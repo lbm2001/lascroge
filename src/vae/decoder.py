@@ -296,7 +296,109 @@ class Decoder(nn.Module):
         return pred_loss, stop_loss, pred_acc.item(), stop_acc.item()
 
 
-    def decode():
-        pass
+    def decode(self, x_tree_vecs, prob_decode, max_decode_len):
+        #assert x_tree_vecs.size(0) == 1 wichtig
+
+        stack = []
+        init_hiddens = create_var_int( torch.zeros(1, self.hidden_size) )
+        zero_pad = create_var_int(torch.zeros(1,1,self.hidden_size))
+        contexts = create_var_int( torch.LongTensor(1).zero_() )
+
+        #Root Prediction
+        root_features = self.aggregate(init_hiddens, contexts, x_tree_vecs, 'features')
+        root = TreeNode(root_features) 
+        root.idx = 0
+        stack.append( (root, None) )
+
+        all_nodes = [root]
+        h = {}
+
+        for step in range(max_decode_len):
+            node_x, _ = stack[-1]
+            cur_h_nei = [ h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors ]
+            if len(cur_h_nei) > 0:
+                cur_h_nei = torch.stack(cur_h_nei, dim=0).view(1,-1, self.hidden_size)
+            else:
+                cur_h_nei = zero_pad
+
+            if isinstance(node_x.features, torch.Tensor):
+                cur_x = node_x.features.clone().detach()
+                if cur_x.dim() == 1:
+                    cur_x = cur_x.unsqueeze(0)
+            else:
+                cur_x = torch.tensor(node_x.features, dtype=torch.float32).unsqueeze(0)
+
+            
+            #Predict stop
+            cur_h = cur_h_nei.sum(dim=1)
+            stop_hiddens = torch.cat([cur_x,cur_h], dim=1)
+            stop_hiddens = F.relu(self.U_i(stop_hiddens) )
+            stop_score = self.aggregate(stop_hiddens, contexts, x_tree_vecs, 'stop')
+
+            if prob_decode:
+                backtrack = (torch.bernoulli( torch.sigmoid(stop_score) ).item() == 0)
+            else:
+                backtrack = (stop_score.item() < 0)
+
+            if not backtrack: #Forward: Predict next clique
+                print(f"Step {step}: Moving forward, predicting new node")
+                new_h = GRU(cur_x, cur_h_nei, self.W_z, self.W_r, self.U_r, self.W_h)
+                pred_features = self.aggregate(new_h, contexts, x_tree_vecs, 'features')
+                """
+                pred_score = aggregate(new_h, contexts, x_tree_vecs, 'features')
+                type_range = VOCAB_SIZE #originally 5
+                if prob_decode:
+                    sort_wid = torch.multinomial(F.softmax(pred_score, dim=1).squeeze(), type_range)
+                else:
+                    _,sort_wid = torch.sort(pred_score, dim=1, descending=True)
+                    sort_wid = sort_wid.data.squeeze()
+
+                next_wid = None
+                for wid in sort_wid[:type_range]:
+                    next_wid = wid
+                    break
+
+                if next_wid is None:
+                    backtrack = True #No more children can be added
+                else:
+                    node_y = TreeNode(next_wid)
+                    node_y.wid = next_wid
+                    node_y.idx = len(all_nodes)
+                    node_y.neighbors.append(node_x)
+                    h[(node_x.idx,node_y.idx)] = new_h[0]
+                    stack.append( (node_y, None) )
+                    all_nodes.append(node_y)
+                    """
+                # For regression, we directly use the predicted features
+                # No need for vocabulary sampling or sorting
+                predicted_features = pred_features.squeeze().detach()  # Get the predicted features for the next node
+                # Optional: Add some validation or constraints on the predicted features
+                # For example, clamp values to reasonable ranges
+                # predicted_features = torch.clamp(predicted_features, min=0.0, max=10.0)
+                node_y = TreeNode(predicted_features)
+                node_y.idx = len(all_nodes)
+                node_y.neighbors.append(node_x)
+                node_x.neighbors.append(node_y)  #ÄÄÄ später hinzugefügt
+                h[(node_x.idx,node_y.idx)] = new_h[0]
+                stack.append( (node_y, None) )
+                all_nodes.append(node_y)
+
+            if backtrack: #Backtrack, use if instead of else
+                if len(stack) == 1:
+                    break #At root, terminate
+
+                node_fa,_ = stack[-2]
+                cur_h_nei = [ h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors if node_y.idx != node_fa.idx ]
+                if len(cur_h_nei) > 0:
+                    cur_h_nei = torch.stack(cur_h_nei, dim=0).view(1,-1,self.hidden_size)
+                else:
+                    cur_h_nei = zero_pad
+
+                new_h = GRU(cur_x, cur_h_nei, self.W_z, self.W_r, self.U_r, self.W_h)
+                h[(node_x.idx,node_fa.idx)] = new_h[0]
+                node_fa.neighbors.append(node_x)
+                stack.pop()
+
+        return root, all_nodes
 
 

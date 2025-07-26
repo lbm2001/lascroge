@@ -6,7 +6,7 @@ from decoder import Decoder
 
 class VAE(nn.Module):
 
-    def __init__(self, hidden_size, latent_size, depth, max_nb, encoding_method="average"):
+    def __init__(self, hidden_size, latent_size, depth, max_nb, feature_dim, encoding_method="average"):
         super(VAE, self).__init__()
 
         self.hidden_size = hidden_size
@@ -14,9 +14,10 @@ class VAE(nn.Module):
         self.depth = depth
         self.max_nb = max_nb
         self.encoding_method = encoding_method
+        self.feature_dim = feature_dim
 
         self.encoder = Encoder(self.hidden_size, self.latent_size, self.depth, self.encoding_method)
-        self.decoder = Decoder(self.hidden_size, self.latent_size, self.max_nb)
+        self.decoder = Decoder(self.hidden_size, self.latent_size, self.max_nb, self.feature_dim)
 
     
     def forward(self, tree_data, encoding_holder, beta, alpha, gamma):

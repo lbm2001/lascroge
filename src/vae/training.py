@@ -10,6 +10,7 @@ LATENT_SIZE = 28
 DEPTHT = 3
 ENCODING_METHOD = "average"
 MAX_NB = 4
+FEATURE_DIM = 3
 
 
 beta = 0.0
@@ -18,7 +19,7 @@ gamma = 0.5
 num_epochs = 5000
 
 
-model = VAE(HIDDEN_SIZE, LATENT_SIZE, DEPTHT, MAX_NB, ENCODING_METHOD)
+model = VAE(HIDDEN_SIZE, LATENT_SIZE, DEPTHT, MAX_NB, FEATURE_DIM, ENCODING_METHOD)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 adj1 = [
@@ -53,16 +54,16 @@ for epoch in range(num_epochs):
     batch = tensorize(cur_attr, cur_conn)
     tree_batch, encoding_holder = batch
     model.zero_grad()
-    loss, kl_div, wacc, pred_loss = model.forward(tree_batch, encoding_holder, beta, alpha, gamma)
+    loss, kl_div, wacc, tacc, pred_loss = model.forward(tree_batch, encoding_holder, beta, alpha, gamma)
     loss.backward()
     nn.utils.clip_grad_norm_(model.parameters(), 50.0)
     optimizer.step()
 
     if(epoch % 50 == 0):
-            print(f"Epoch {epoch}: Loss={loss.item(): .4f}, Pred Acc={wacc}, Stop Acc={tacc}, PredLoss={pred_loss.item(): .4f}, KL Divergence={kl_div.item(): .4f}")
+        print(f"Epoch {epoch}: Loss={loss.item(): .4f}, Pred Acc={wacc}, Stop Acc={tacc}, PredLoss={pred_loss.item(): .4f}, KL Divergence={kl_div.item(): .4f}")
         
-    torch.save(model.state_dict(), 'trained_model.pth')
-    print("Model saved after epoch", epoch)
+torch.save(model.state_dict(), 'trained_model.pth')
+print("Model saved after epoch", epoch)
 
 
 

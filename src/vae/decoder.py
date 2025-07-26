@@ -65,8 +65,8 @@ class MessagePassingHandler(object):
         self.max_nb = max_nb
     
 
-    def _setup_root_prediction(self):
-        self.node_prediction_data.hidden_states.append(create_var_int(torch.zeros(self.batch_size,))) # Initial hidden states for root prediction
+    def _setup_root_prediction(self, hidden_size):
+        self.node_prediction_data.hidden_states.append(create_var_int(torch.zeros(self.batch_size, hidden_size))) # Initial hidden states for root prediction
         self.node_prediction_data.targets.extend([tree.nodes[0].features for tree in self.tree_batch]) # Root nodes features
         self.node_prediction_data.contexts.append( create_var_int( torch.LongTensor(range(self.batch_size)) ) ) # Creates batch indices
     
@@ -95,21 +95,21 @@ class MessagePassingHandler(object):
 
             #Neighbors for message passing (target not included)
             neighbor_hidden_states_wo_target = [self.hidden_states_directed_edges[(neighbor.idx, source_node.idx)] for neighbor in source_node.neighbors if neighbor.idx != target_node.idx]
-            
             padding_length = self.max_nb - len(neighbor_hidden_states_wo_target)
-
             node_prediction_neighbor_hidden_states.extend(neighbor_hidden_states_wo_target)
             node_prediction_neighbor_hidden_states.extend([padding] * padding_length)
 
             #Neighbors for stop prediction (all neighbors)
             neighbor_hidden_states = [self.hidden_states_directed_edges[(node_y.idx,source_node.idx)] for node_y in source_node.neighbors]
+            padding_length = self.max_nb - len(neighbor_hidden_states)
             stop_prediction_neighbor_hidden_states.extend(neighbor_hidden_states)
             stop_prediction_neighbor_hidden_states.extend([padding] * padding_length)
 
             node_features.append(source_node.features)
         
         node_prediction_neighbor_hidden_states = torch.stack(node_prediction_neighbor_hidden_states, dim=0).view(-1, self.max_nb, hidden_size)
-        stop_prediction_neighbor_hidden_states = torch.stack(stop_prediction_neighbor_hidden_states, dim=0).view(-1, self.max_nb, hidden_size).sum(dim=1)
+        stop_prediction_neighbor_hidden_states = torch.stack(stop_prediction_neighbor_hidden_states, dim=0).view(-1, self.max_nb, hidden_size)
+        stop_prediction_neighbor_hidden_states = stop_prediction_neighbor_hidden_states.sum(dim=1)
         node_features = create_var_int(torch.FloatTensor(np.array(node_features)))
 
         return node_prediction_neighbor_hidden_states, stop_prediction_neighbor_hidden_states, node_features
@@ -135,26 +135,21 @@ class MessagePassingHandler(object):
         self.stop_prediction_data.targets.extend( stop_target )
 
 
-    def _collect_prediction_targets(self, current_dfs_steps):
+    def _collect_prediction_targets(self, current_dfs_steps, new_hidden_states):
         node_prediction_targets = []
         node_prediction_list = []
         stop_target = []
 
         for i, step in enumerate(current_dfs_steps):
-            _, target_node, direction = step
+            source_node, target_node, direction = step
+            self.hidden_states_directed_edges[(source_node.idx ,target_node.idx)] = new_hidden_states[i]
+            target_node.neighbors.append(source_node)
             if direction == 1:
-                node_prediction_targets.append(target_node.nid)
+                node_prediction_targets.append(target_node.features)
                 node_prediction_list.append(i) 
             stop_target.append(direction)
         
         return node_prediction_targets, node_prediction_list, stop_target
-
-
-    def _update_graph(self, current_dfs_steps, new_hidden_states):
-        for i, step in enumerate(current_dfs_steps):
-            source_node, target_node, _ = step
-            self.hidden_states_directed_edges[(source_node.idx ,target_node.idx)] = new_hidden_states[i]
-            target_node.neighbors.append(source_node)
 
 
     def _root_stop(self, padding):
@@ -165,7 +160,7 @@ class MessagePassingHandler(object):
         for tree in self.tree_batch:
             root = tree.nodes[0]
             features.append(root.features)
-            current_neighbors = [self.hidden_states_directed_edges(root_neighbor.idx, root.idx) for root_neighbor in root.neighbors]
+            current_neighbors = [self.hidden_states_directed_edges[root_neighbor.idx, root.idx] for root_neighbor in root.neighbors]
             pad_len = self.max_nb  - len(current_neighbors)
             neighbors.extend(current_neighbors)
             neighbors.extend([padding] * pad_len)
@@ -175,7 +170,7 @@ class MessagePassingHandler(object):
 
     def message_passing(self, hidden_size, update_gate_linear, reset_gate_input_linear, reset_gate_neighbor_linear, candidate_hidden_linear):
 
-        self._setup_root_prediction()
+        self._setup_root_prediction(hidden_size)
 
         padding = create_var_int(torch.zeros(hidden_size), False)
 
@@ -187,9 +182,7 @@ class MessagePassingHandler(object):
             node_prediction_neighbor_hidden_states, stop_prediction_neighbor_hidden_states, node_features = self._extract_neighbor_data(current_dfs_steps, padding, hidden_size)
 
             new_hidden_states = GRU(node_features, node_prediction_neighbor_hidden_states, update_gate_linear, reset_gate_input_linear, reset_gate_neighbor_linear, candidate_hidden_linear)
-            self._update_graph(current_dfs_steps, new_hidden_states)
-            
-            node_prediction_targets, node_prediction_list, stop_target = self._collect_prediction_targets(current_dfs_steps)
+            node_prediction_targets, node_prediction_list, stop_target = self._collect_prediction_targets(current_dfs_steps, new_hidden_states)
 
             self._store_node_prediction_data(node_prediction_targets, node_prediction_list, new_hidden_states)
             self._store_stop_prediction_data(stop_prediction_neighbor_hidden_states, stop_target, node_features)
@@ -218,28 +211,29 @@ class MessagePassingHandler(object):
 
 class Decoder(nn.Module):
 
-    def __init__(self, hidden_size, latent_size, max_nb):
+    def __init__(self, hidden_size, latent_size, max_nb, feature_dim):
         super(Decoder, self).__init__()
         self.hidden_size = hidden_size
         self.latent_size = latent_size
         self.max_nb = max_nb
+        self.feature_dim = feature_dim
 
         #GRU Weights
-        self.W_z = nn.Linear(2 * self.hidden_size, self.latent_size)
+        self.W_z = nn.Linear(2 * self.hidden_size, self.hidden_size)
         self.U_r = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.W_r = nn.Linear(self.hidden_size, self.hidden_size)
         self.W_h = nn.Linear(2 * self.hidden_size, self.hidden_size)
 
         #Word Prediction Weights 
-        self.W = nn.Linear(hidden_size + latent_size, hidden_size)
+        self.W = nn.Linear(self.hidden_size + self.latent_size, self.hidden_size)
 
         #Stop Prediction Weights
-        self.U = nn.Linear(hidden_size + latent_size, hidden_size)
-        self.U_i = nn.Linear(2 * hidden_size, hidden_size)
+        self.U = nn.Linear(self.hidden_size + self.latent_size, self.hidden_size)
+        self.U_i = nn.Linear(2 * self.hidden_size, self.hidden_size)
 
         #Output Weights
-        self.W_o = nn.Linear(hidden_size, 3 * 14)
-        self.U_o = nn.Linear(hidden_size, 1)
+        self.W_o = nn.Linear(self.hidden_size, self.feature_dim)
+        self.U_o = nn.Linear(self.hidden_size, 1)
 
         #Loss Functions
         self.pred_loss = nn.CrossEntropyLoss(reduction='sum')
@@ -266,14 +260,19 @@ class Decoder(nn.Module):
         mp_handler.message_passing(self.hidden_size, self.W_z, self.U_r, self.W_r, self.W_h)
         
         pred_hiddens = mp_handler.node_prediction_data.hidden_states
+        pred_targets = mp_handler.node_prediction_data.targets
         pred_contexts = mp_handler.node_prediction_data.contexts
+
+        stop_hiddens = mp_handler.stop_prediction_data.hidden_states
+        stop_targets = mp_handler.stop_prediction_data.targets
+        stop_contexts = mp_handler.stop_prediction_data.contexts
 
         pred_scores = self.aggregate(pred_hiddens, pred_contexts, latent_space_tree_vecs, 'features')  # Feature prediction: Use aggregate function to predict node features
         
         # Convert pred_targets to tensor for regression
         pred_targets = create_var_int(torch.FloatTensor(pred_targets)) #was LongTensor before
 
-        pred_loss = self.pred_loss_nn(pred_scores, pred_targets) / len(tree_data) #Loss calculation: Compute regression loss for feature prediction
+        pred_loss = self.pred_loss(pred_scores, pred_targets) / len(tree_data) #Loss calculation: Compute regression loss for feature prediction
 
         # Die unteren 3 Zeilen sind unnötig, da wir pred_acc nicht brauchen
         distance_threshold = 10  # Define a threshold for distance
@@ -288,7 +287,7 @@ class Decoder(nn.Module):
         stop_scores = stop_scores.squeeze(-1)  # Simplified placeholder
         stop_targets = create_var_float(torch.Tensor(stop_targets))
         
-        stop_loss = self.stop_loss_nn(stop_scores, stop_targets) / len(tree_data)  
+        stop_loss = self.stop_loss(stop_scores, stop_targets) / len(tree_data)  
         # Die unteren 3 Zeilen brauchen wir nicht, stop_acc ist unnötig
         stops = torch.ge(stop_scores, 0).float() #checks if each score is ≥ 0; If score ≥ 0 → decision is 1 (continue expanding) , If score < 0 → decision is 0 (stop expanding)
         stop_acc = torch.eq(stops, stop_targets).float() #compares each prediction with the correct answer; .float() converts to 1.0 (correct) or 0.0 (incorrect)

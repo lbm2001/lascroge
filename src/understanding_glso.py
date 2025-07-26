@@ -158,8 +158,155 @@ feats2 = [
     [0, 1, 2],
     [3, 5, 1]
 ]
+"""
+  # Graph 1: Linear chain (3 nodes) - 0-1-2
+adj1 = [
+      [0, 1, 0],
+      [1, 0, 1],
+      [0, 1, 0]
+  ]
+feats1 = [
+      [1, 2, 3],
+      [2, 3, 4],
+      [3, 4, 5]
+  ]
 
+  # Graph 2: Star with 3 children (4 nodes) - 0 center, 1,2,3 leaves
+adj2 = [
+      [0, 1, 1, 1],
+      [1, 0, 0, 0],
+      [1, 0, 0, 0],
+      [1, 0, 0, 0]
+  ]
+feats2 = [
+      [0, 1, 2],
+      [1, 2, 3],
+      [2, 3, 4],
+      [3, 4, 5]
+  ]
 
+  # Graph 3: 4-node linear chain - 0-1-2-3
+adj3 = [
+      [0, 1, 0, 0],
+      [1, 0, 1, 0],
+      [0, 1, 0, 1],
+      [0, 0, 1, 0]
+  ]
+feats3 = [
+      [2, 1, 0],
+      [1, 3, 2],
+      [0, 2, 4],
+      [3, 1, 1]
+  ]
+
+  # Graph 4: T-shaped (4 nodes) - 1-0-2 with 0-3
+adj4 = [
+      [0, 1, 1, 1],
+      [1, 0, 0, 0],
+      [1, 0, 0, 0],
+      [1, 0, 0, 0]
+  ]
+feats4 = [
+      [1, 1, 1],
+      [2, 0, 3],
+      [0, 3, 2],
+      [3, 2, 0]
+  ]
+
+  # Graph 5: Small tree - 0 has children 1,2 and 1 has child 3
+adj5 = [
+      [0, 1, 1, 0],
+      [1, 0, 0, 1],
+      [1, 0, 0, 0],
+      [0, 1, 0, 0]
+  ]
+feats5 = [
+      [0, 0, 1],
+      [1, 1, 0],
+      [2, 1, 1],
+      [1, 2, 2]
+  ]
+  
+  # Graph 1: Linear chain (5 nodes) - 0-1-2-3-4
+adj1 = [
+      [0, 1, 0, 0, 0],
+      [1, 0, 1, 0, 0],
+      [0, 1, 0, 1, 0],
+      [0, 0, 1, 0, 1],
+      [0, 0, 0, 1, 0]
+  ]
+feats1 = [
+      [1, 1, 1],
+      [2, 2, 2],
+      [3, 3, 3],
+      [4, 4, 4],
+      [5, 5, 5]
+  ]
+
+  # Graph 2: Star with 4 leaves (5 nodes) - 0 center, 1,2,3,4 leaves
+adj2 = [
+      [0, 1, 1, 1, 1],
+      [1, 0, 0, 0, 0],
+      [1, 0, 0, 0, 0],
+      [1, 0, 0, 0, 0],
+      [1, 0, 0, 0, 0]
+  ]
+feats2 = [
+      [0, 5, 0],  # Center node
+      [1, 1, 4],  # Leaf 1
+      [2, 2, 3],  # Leaf 2
+      [3, 3, 2],  # Leaf 3
+      [4, 4, 1]   # Leaf 4
+  ]
+
+  # Graph 3: Binary tree (5 nodes) - 0 root, 1,2 children of 0, 3,4 children of 1
+adj3 = [
+      [0, 1, 1, 0, 0],
+      [1, 0, 0, 1, 1],
+      [1, 0, 0, 0, 0],
+      [0, 1, 0, 0, 0],
+      [0, 1, 0, 0, 0]
+  ]
+feats3 = [
+      [2, 3, 2],  # Root
+      [1, 2, 3],  # Left child of root
+      [3, 4, 1],  # Right child of root
+      [0, 1, 4],  # Left child of node 1
+      [2, 1, 5]   # Right child of node 1
+  ]
+
+  # Graph 4: Path with branch (5 nodes) - 0-1-2-3 with 4 connected to 2
+adj4 = [
+      [0, 1, 0, 0, 0],
+      [1, 0, 1, 0, 0],
+      [0, 1, 0, 1, 1],
+      [0, 0, 1, 0, 0],
+      [0, 0, 1, 0, 0]
+  ]
+feats4 = [
+      [1, 0, 2],
+      [2, 1, 3],
+      [3, 2, 4],  # Branch point
+      [4, 3, 5],
+      [3, 4, 3]   # Branch leaf
+  ]
+
+  # Graph 5: Y-shaped tree (5 nodes) - 0-1-2 spine, with 3,4 connected to 2
+adj5 = [
+      [0, 1, 0, 0, 0],
+      [1, 0, 1, 0, 0],
+      [0, 1, 0, 1, 1],
+      [0, 0, 1, 0, 0],
+      [0, 0, 1, 0, 0]
+  ]
+feats5 = [
+      [0, 2, 1],
+      [1, 3, 2],
+      [2, 4, 3],  # Junction point
+      [3, 5, 2],  # Branch 1
+      [1, 6, 4]   # Branch 2
+  ]
+"""
 
 cur_conn = [np.array(adj1), np.array(adj2)] 
 cur_attr = [np.array(feats1), np.array(feats2)]
@@ -250,8 +397,8 @@ explanation = """
 from torch.autograd import Variable
 
 # CONSTANTS (attributes in the model)
-HIDDEN_SIZE = 3
-LATENT_SIZE = 28
+HIDDEN_SIZE = 100
+LATENT_SIZE = 16
 DEPTHT = 3
 ENCODING_METHOD = "average"
 MAX_NB = 4
@@ -348,7 +495,7 @@ def dfs(stack, x, fa_idx):
 
 #===============#
 
-def encode(jtenc_holder):
+def encode(jtenc_holder, model):
     fnode, fmess, node_graph, mess_graph, scope, leafs = jtenc_holder
 
     # vae_train.py -> forward() #ÄÄÄ jtnn_enc.py -> forward() oder vae_train.py -> encode()? 
@@ -358,7 +505,7 @@ def encode(jtenc_holder):
     mess_graph = create_var_int(mess_graph)
     messages = create_var_float(torch.zeros(mess_graph.size(0), HIDDEN_SIZE))
 
-    fnode = fnode # Here we skip the embedding
+    fnode = model.input_to_hidden(fnode) # Here we skip the embedding
     fmess = index_select_ND(fnode, 0, fmess)
     gru = GraphGRU(HIDDEN_SIZE, HIDDEN_SIZE, DEPTHT)
     messages = gru.forward(messages, fmess, mess_graph)
@@ -499,8 +646,8 @@ def decoder_forward(mol_batch, x_tree_vecs, model):
         #if torch.cuda.is_available():
         #    cur_x = cur_x.cuda()
         #Clique embedding
-        cur_x = create_var_int(torch.FloatTensor(np.array(cur_x)))
-        cur_x = cur_x  # Skip embedding for now 
+        cur_x = create_var_float(torch.FloatTensor(np.array(cur_x)))
+        cur_x = model.features_to_dim(cur_x)  # Skip embedding for now 
         
         #Message passing
         cur_h_nei = torch.stack(cur_h_nei, dim=0).view(-1,MAX_NB,HIDDEN_SIZE)
@@ -561,8 +708,8 @@ def decoder_forward(mol_batch, x_tree_vecs, model):
     #cur_x = torch.tensor(cur_x, dtype=torch.float32)
     #if torch.cuda.is_available():
     #    cur_x = cur_x.cuda()
-    cur_x = create_var_int(torch.LongTensor(cur_x))
-    cur_x = cur_x # Embedding skipped for now
+    cur_x = create_var_float(torch.LongTensor(cur_x))
+    cur_x = model.features_to_dim(cur_x) # Embedding skipped for now
 
     cur_o_nei = torch.stack(cur_o_nei, dim=0).view(-1,MAX_NB,HIDDEN_SIZE) # Was soll MAX_NB sein !!!
     cur_o = cur_o_nei.sum(dim=1)
@@ -577,6 +724,9 @@ def decoder_forward(mol_batch, x_tree_vecs, model):
     pred_hiddens = torch.cat(pred_hiddens, dim=0)
     pred_scores = aggregate(pred_hiddens, pred_contexts, x_tree_vecs, 'features', model)  # Feature prediction: Use aggregate function to predict node features
     
+    #print(f"Prediction targets: {pred_targets}")    
+    #print(f"Stop targets in training: {stop_targets}")
+
     # Convert pred_targets to tensor for regression
     #pred_targets = torch.tensor(pred_targets, dtype=torch.float32)
     pred_targets = create_var_int(torch.FloatTensor(pred_targets)) #was LongTensor before
@@ -616,7 +766,7 @@ def decoder_forward(mol_batch, x_tree_vecs, model):
 #word_loss, topo_loss, word_acc, topo_acc = decode(x_batch, z_tree_vecs)
 MAX_DECODE_LEN = 100
 def decoder_decode(x_tree_vecs, prob_decode, model):
-        #assert x_tree_vecs.size(0) == 1 wichtig
+        assert x_tree_vecs.size(0) == 1 
 
         stack = []
         init_hiddens = create_var_int( torch.zeros(1, HIDDEN_SIZE) )
@@ -636,6 +786,9 @@ def decoder_decode(x_tree_vecs, prob_decode, model):
         all_nodes = [root]
         h = {}
         for step in range(MAX_DECODE_LEN):
+            print(f"Step {step}: Current stack size: {len(stack)}")
+            print(f"Step {step}: Current node: {stack[-1][0].idx}")
+            print(f"Step {step}: Stack contents: {[node.idx for node, _ in stack]}")
             node_x, _ = stack[-1]
             cur_h_nei = [ h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors ]
             if len(cur_h_nei) > 0:
@@ -650,12 +803,17 @@ def decoder_decode(x_tree_vecs, prob_decode, model):
             # if torch.cuda.is_available():
             #    cur_x = cur_x.cuda()
                     # Convert node features to tensor and project to hidden size
+            cur_x = create_var_float(torch.tensor(node_x.features, dtype=torch.float32).unsqueeze(0))
+            cur_x = model.features_to_dim(cur_x)
+            cur_x = cur_x.squeeze(1)
+            """
             if isinstance(node_x.features, torch.Tensor):
                 cur_x = node_x.features.clone().detach()
                 if cur_x.dim() == 1:
                     cur_x = cur_x.unsqueeze(0)
             else:
                 cur_x = torch.tensor(node_x.features, dtype=torch.float32).unsqueeze(0)
+                """
 
             
             #Predict stop
@@ -667,6 +825,8 @@ def decoder_decode(x_tree_vecs, prob_decode, model):
             print(f"cur_h_nei shape: {cur_h_nei.shape}")
             stop_hiddens = torch.cat([cur_x,cur_h], dim=1)
             stop_hiddens = F.relu(model.U_i(stop_hiddens) )
+            print(f"Step {step}: contexts = {contexts}, stop_hiddens shape: {stop_hiddens.shape}")
+            print(f"Step {step}: cur_x = {cur_x.flatten()[:3]}, cur_h = {cur_h.flatten()[:3]}")
             stop_score = aggregate(stop_hiddens, contexts, x_tree_vecs, 'stop', model)
             print(f"Step {step}: stop_score = {stop_score.item()}")
             if prob_decode:
@@ -741,7 +901,7 @@ def decoder_decode(x_tree_vecs, prob_decode, model):
         return root, all_nodes
 
 
-
+"""
 print("Shape of current attributes:", np.array(cur_attr).shape)
 print("Shape of current connectivity:", np.array(cur_conn).shape)
 
@@ -770,13 +930,13 @@ print(f"Number of nodes in decoded tree: {len(all_nodes)}")
 print("All nodes in decoded tree:")
 print(pls)
 
-"""
+
 asd = decoder_forward(tree_batch, z_tree_vecs)
 pred_loss, stop_loss, pred_acc, stop_acc = asd
 print(f"Prediction Loss: {pred_loss.item()}, Stop Loss: {stop_loss.item()}")
 print(f"Prediction Accuracy: {pred_acc}, Stop Accuracy: {stop_acc}")
 """
-"""
+
 class GLSOModel(nn.Module):
     def __init__(self):
         super(GLSOModel, self).__init__()
@@ -797,6 +957,9 @@ class GLSOModel(nn.Module):
         W_o = nn.Linear(HIDDEN_SIZE, feature_dim)  # Output layer for clique prediction
         U_o = nn.Linear(HIDDEN_SIZE, 1)  # Output layer for stop prediction
 
+        input_to_hidden = nn.Linear(feature_dim, HIDDEN_SIZE)  # Linear layer to project input features to hidden size
+        features_to_dim = nn.Linear(feature_dim, HIDDEN_SIZE)  # Linear layer to project features to hidden size
+
         self.T_mean = T_mean
         self.T_Var = T_Var
         self.W_z = W_z
@@ -808,22 +971,24 @@ class GLSOModel(nn.Module):
         self.U_o = U_o
         self.W = W
         self.U = U
+        self.input_to_hidden = input_to_hidden
+        self.features_to_dim = features_to_dim
 
     def forward(self, batch, beta, alpha, gamma):
         tree_batch, jtenc_holder = batch
-        res = encode(jtenc_holder)
+        res = encode(jtenc_holder, self)
         tree_vecs = res[0]
         messages = res[1]
 
         z_tree_vecs, kl_div = rsample(z_vecs=tree_vecs, W_mean=self.T_mean, W_var=self.T_Var)
 
         pred_loss, stop_loss, pred_acc, stop_acc = decoder_forward(tree_batch, z_tree_vecs, self)
-        total_loss = pred_loss + stop_loss + beta * kl_div
+        total_loss = pred_loss + 0.1 * stop_loss + beta * kl_div
 
         return total_loss, kl_div, pred_acc, stop_acc, pred_loss
     
     def decode(self, z_tree_vecs):
-        root, all_nodes = decoder_decode(z_tree_vecs, prob_decode=False, model=self)
+        root, all_nodes = decoder_decode(z_tree_vecs, prob_decode=True, model=self)
 
         print("Decoded tree structure:")
         print(f"Decoded tree root: {root.features}")
@@ -859,14 +1024,28 @@ def test_decoder():
 
     batch = tensorize(cur_attr, cur_conn)  # Get the current batch
     tree_batch, jtenc_holder = batch
-    res = encode(jtenc_holder)
+    res = encode(jtenc_holder, model)
     tree_vecs = res[0]
 
     z_tree_vecs, _ = rsample(z_vecs=tree_vecs, W_mean=model.T_mean, W_var=model.T_Var)
-    model.decode(z_tree_vecs)
+    
+    z_single = z_tree_vecs[0:1]
+    model.decode(z_single)
+    print(cur_conn[0])
+
+    """
+    print("Testing with probabilistic decoding:")
+    for i in range(3):
+        print(f"\n--- Attempt {i+1} ---")
+        model.decode(z_tree_vecs)
+    
+    print("\nTesting with greedy decoding (modified threshold):")
+    root, all_nodes = decoder_decode(z_tree_vecs, prob_decode=False, model=model)
+    print(f"Greedy decode - Number of nodes: {len(all_nodes)}")
+    for j, node in enumerate(all_nodes):
+        print(f"Node {j}: {node.features}")
+        """
 
 if __name__ == "__main__":       
-      #train_loop()
+      train_loop()
       test_decoder()
-
-      """

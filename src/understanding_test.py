@@ -763,3 +763,40 @@ asd = decoder_forward(tree_batch, z_tree_vecs)
 pred_loss, stop_loss, pred_acc, stop_acc = asd
 print(f"Prediction Loss: {pred_loss.item()}, Stop Loss: {stop_loss.item()}")
 print(f"Prediction Accuracy: {pred_acc}, Stop Accuracy: {stop_acc}")
+
+
+
+      
+
+
+"""
+  print(f"Prediction targets: {[mol_tree.nodes[i].features for i, mol_tree in enumerate(mol_batch) for i in range(len(mol_tree.nodes))]}")       
+  print(f"Stop targets in training: {stop_targets}")
+
+
+  Epoch 8850: Loss= 8.0070, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.8568, KL Divergence= 0.0239
+Epoch 8900: Loss= 7.9474, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.8012, KL Divergence= 0.0201
+Epoch 8950: Loss= 7.7677, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.6203, KL Divergence= 0.0209
+Epoch 9000: Loss= 7.8295, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.6794, KL Divergence= 0.0218
+Epoch 9050: Loss= 7.9047, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.7536, KL Divergence= 0.0249
+Epoch 9100: Loss= 7.9879, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.8310, KL Divergence= 0.0310
+Epoch 9150: Loss= 7.8106, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.6600, KL Divergence= 0.0245
+Epoch 9200: Loss= 7.9103, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.7546, KL Divergence= 0.0298
+Epoch 9250: Loss= 7.9778, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.8243, KL Divergence= 0.0275
+Epoch 9300: Loss= 7.8570, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.7024, KL Divergence= 0.0282
+Epoch 9350: Loss= 7.8217, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.6640, KL Divergence= 0.0316
+Epoch 9400: Loss= 8.1509, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 6.0013, KL Divergence= 0.0237
+Epoch 9450: Loss= 7.7675, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.6167, KL Divergence= 0.0247
+Epoch 9500: Loss= 7.8585, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.7066, KL Divergence= 0.0258
+Epoch 9550: Loss= 7.9349, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.7762, KL Divergence= 0.0326
+Epoch 9600: Loss= 7.9398, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.7952, KL Divergence= 0.0188
+Epoch 9650: Loss= 7.8337, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.6841, KL Divergence= 0.0238
+Epoch 9700: Loss= 7.8572, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.6998, KL Divergence= 0.0315
+Epoch 9750: Loss= 7.8817, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.7251, KL Divergence= 0.0302
+Epoch 9800: Loss= 7.7014, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.5515, KL Divergence= 0.0241
+Epoch 9850: Loss= 7.9601, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.8087, KL Divergence= 0.0255
+Epoch 9900: Loss= 7.9116, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.7564, KL Divergence= 0.0292
+Epoch 9950: Loss= 7.7049, Pred Acc=1.0, Stop Acc=0.8787878751754761, PredLoss= 5.5542, KL Divergence= 0.0239
+Model saved after epoch 9999
+(base) PS C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\src> 
+  """

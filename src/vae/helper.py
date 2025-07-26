@@ -5,109 +5,6 @@ import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class TreeNode(object):  
-
-    def __init__(self, attr): 
-
-        self.neighbors = []  
-        self.features = attr 
-        
-    def add_neighbor(self, nei_node):  
-        self.neighbors.append(nei_node)  
-
-class ModTree(object):  
-
-    def __init__(self, attr, conn):  
-        self.nodes = []  
-        for i,c in enumerate(attr):  
-            node = TreeNode(c)  
-            self.nodes.append(node)  
-
-        for i in range(len(attr)): 
-            for j in range(i + 1, len(attr)): 
-                if conn[i, j] != 0: 
-                    self.nodes[i].add_neighbor(self.nodes[j])  
-                    self.nodes[j].add_neighbor(self.nodes[i]) 
-
-
-        for i,node in enumerate(self.nodes): 
-            node.nid = i + 1 
-            node.is_leaf = (len(node.neighbors) == 1)  
-
-    def size(self): 
-        return len(self.nodes) 
-
-
-def tensorize(attr, conn): 
-    tree_batch = [] 
-    for idx in range(len(attr)): 
-        mod_tree = ModTree(attr[idx], conn[idx])  
-        tree_batch.append(mod_tree) 
-
-    tot = 0  
-    for mod_tree in tree_batch: 
-        for node in mod_tree.nodes:  
-            node.idx = tot  
-            tot += 1  
-
-    
-    node_batch = []  
-    scope = []  
-    leaf = []  
-    for tree in tree_batch:  
-        scope.append((len(node_batch), len(tree.nodes)))  
-        
-        node_batch.extend(tree.nodes)  
-
-        tree_leaf = []  
-        
-        for node in tree.nodes:  
-            if len(node.neighbors) == 1: 
-                tree_leaf.append(node.idx)  
-        leaf.append(tree_leaf)  
-    
-    
-    messages,mess_dict = [None],{}
-    fnode = []
-    for x in node_batch: 
-        fnode.append(x.features) 
-        for y in x.neighbors:
-            mess_dict[(x.idx,y.idx)] = len(messages) 
-            messages.append( (x,y) )
-
-    
-    
-
-    node_graph = [[] for i in range(len(node_batch))] 
-    mess_graph = [[] for i in range(len(messages))] 
-    fmess = [0] * len(messages) 
-
-    for x,y in messages[1:]:  
-        mid1 = mess_dict[(x.idx,y.idx)]  
-        fmess[mid1] = x.idx  
-        node_graph[y.idx].append(mid1)  
-        for z in y.neighbors:  
-            if z.idx == x.idx: continue  
-            mid2 = mess_dict[(y.idx,z.idx)]  
-            mess_graph[mid2].append(mid1)  
-            
-    max_len = max([len(t) for t in node_graph] + [1]) 
-    for t in node_graph:
-        pad_len = max_len - len(t)
-        t.extend([0] * pad_len)
-
-    max_len = max([len(t) for t in mess_graph] + [1])
-    for t in mess_graph:
-        pad_len = max_len - len(t)
-        t.extend([0] * pad_len)
-
-    mess_graph = torch.LongTensor(mess_graph)
-    node_graph = torch.LongTensor(node_graph)
-    fmess = torch.LongTensor(fmess)
-    fnode = torch.LongTensor(np.array(fnode)) 
-    return tree_batch, (fnode, fmess, node_graph, mess_graph, scope, leaf)
-
-
 def GRU(x, h_nei, W_z, W_r, U_r, W_h):
     hidden_size = x.size()[-1]
     sum_h = h_nei.sum(dim=1)
@@ -124,6 +21,8 @@ def GRU(x, h_nei, W_z, W_r, U_r, W_h):
     pre_h = torch.tanh(W_h(h_input))
     new_h = (1.0 - z) * sum_h + z * pre_h
     return new_h
+
+
 
 def create_var_float(tensor, requires_grad=False):
     return Variable(tensor.float().to(device), requires_grad=requires_grad)
@@ -175,9 +74,3 @@ class GraphGRU(nn.Module):
 
         return h
 
-def depth_first_search(stack, x, fa_idx):
-    for y in x.neighbors:
-        if y.idx == fa_idx: continue
-        stack.append( (x,y,1) )
-        depth_first_search(stack, y, x.idx)
-        stack.append( (y,x,0) )

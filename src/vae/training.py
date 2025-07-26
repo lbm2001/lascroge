@@ -2,7 +2,7 @@ import numpy as np
 import torch.nn as nn
 import torch
 from vae import VAE
-from helper import tensorize
+from tree_batch_processor import TreeBatchProcessor
 
 # CONSTANTS (attributes in the model)
 HIDDEN_SIZE = 3
@@ -53,8 +53,10 @@ def train_loop(cur_conn, cur_attr):
 
     for epoch in range(num_epochs):
 
-        batch = tensorize(cur_attr, cur_conn)
-        tree_batch, encoding_holder = batch
+        tree_batch_processor = TreeBatchProcessor(cur_conn, cur_attr)
+        tree_batch = tree_batch_processor.get_batch()
+        encoding_holder = tree_batch_processor.prepare_encoding()
+
         model.zero_grad()
         loss, kl_div, wacc, tacc, pred_loss = model.forward(tree_batch, encoding_holder, beta, alpha, gamma)
         loss.backward()
@@ -71,7 +73,9 @@ def test_decoder(model_path, cur_attr, cur_conn):
     model = VAE(HIDDEN_SIZE, LATENT_SIZE, DEPTHT, MAX_NB, FEATURE_DIM).to(device)
     model.load_state_dict(torch.load(model_path))
 
-    _, encoding_holder = tensorize(cur_attr, cur_conn)
+    tb_processor = TreeBatchProcessor(cur_conn, cur_attr)
+    encoding_holder = tb_processor.prepare_encoding()
+
     res = model.encoder.encode(encoding_holder)
     tree_vecs = res[0]
 
@@ -81,7 +85,8 @@ def test_decoder(model_path, cur_attr, cur_conn):
     print(all_nodes)
 
 
-test_decoder("/Users/lukasmueller/github/lascroge/trained_model.pth", cur_attr, cur_conn)
+train_loop(cur_conn, cur_attr)
+#test_decoder("/Users/lukasmueller/github/lascroge/trained_model.pth", cur_attr, cur_conn)
     
 
 

@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from helper import create_var_int, create_var_float, depth_first_search, GRU, ModTree, TreeNode
+from helper import create_var_int, create_var_float, GRU
+from mod_tree import TreeNode
 
 
 class NodePredictionData(object):
@@ -27,6 +28,14 @@ class DFSHandler(object):
         self.traces = []
 
 
+    def depth_first_search(self, stack, x, fa_idx):
+        for y in x.neighbors:
+            if y.idx == fa_idx: continue
+            stack.append( (x,y,1) )
+            self.depth_first_search(stack, y, x.idx)
+            stack.append( (y,x,0) )
+
+
     def get_traces(self, trees):
         for tree in trees:
             dfs_stack = []
@@ -41,7 +50,7 @@ class DFSHandler(object):
         for y in x.neighbors:
             if y.idx == fa_idx: continue
             stack.append( (x,y,1) )
-            depth_first_search(stack, y, x.idx)
+            self.depth_first_search(stack, y, x.idx)
             stack.append( (y,x,0) )
 
 

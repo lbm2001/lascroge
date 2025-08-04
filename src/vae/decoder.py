@@ -75,9 +75,14 @@ class MessagePassingHandler(object):
     
 
     def _setup_root_prediction(self, hidden_size):
-        self.node_prediction_data.hidden_states.append(create_var_int(torch.zeros(self.batch_size, hidden_size))) # Initial hidden states for root prediction
-        self.node_prediction_data.targets.extend([tree.nodes[0].features for tree in self.tree_batch]) # Root nodes features
-        self.node_prediction_data.contexts.append( create_var_int( torch.LongTensor(range(self.batch_size)) ) ) # Creates batch indices
+
+        initial_hidden_states = create_var_int(torch.zeros(self.batch_size, hidden_size))
+        root_nodes_features = [tree.nodes[0].features for tree in self.tree_batch]
+        batch_indices = create_var_int( torch.LongTensor(range(self.batch_size)) )
+
+        self.node_prediction_data.hidden_states.append(initial_hidden_states)
+        self.node_prediction_data.targets.extend(root_nodes_features)
+        self.node_prediction_data.contexts.append(batch_indices)
     
 
     def _collect_steps(self, step_number):
@@ -93,7 +98,7 @@ class MessagePassingHandler(object):
         return current_steps, batch_list
 
 
-    def _extract_neighbor_data(self, current_dfs_steps, padding, hidden_size):
+    def _extract_neighbor_data(self, current_dfs_steps, padding, hidden_size, features_to_dim):
         
         node_prediction_neighbor_hidden_states = [] # was cur_h_nei
         stop_prediction_neighbor_hidden_states = [] # was cur_o_nei
@@ -120,6 +125,7 @@ class MessagePassingHandler(object):
         stop_prediction_neighbor_hidden_states = torch.stack(stop_prediction_neighbor_hidden_states, dim=0).view(-1, self.max_nb, hidden_size)
         stop_prediction_neighbor_hidden_states = stop_prediction_neighbor_hidden_states.sum(dim=1)
         node_features = create_var_int(torch.FloatTensor(np.array(node_features)))
+        node_features = features_to_dim(node_features)
 
         return node_prediction_neighbor_hidden_states, stop_prediction_neighbor_hidden_states, node_features
 
@@ -177,7 +183,7 @@ class MessagePassingHandler(object):
         return features, neighbors
 
 
-    def message_passing(self, hidden_size, update_gate_linear, reset_gate_input_linear, reset_gate_neighbor_linear, candidate_hidden_linear):
+    def message_passing(self, hidden_size, update_gate_linear, reset_gate_input_linear, reset_gate_neighbor_linear, candidate_hidden_linear, features_to_dim):
 
         self._setup_root_prediction(hidden_size)
 
@@ -188,7 +194,7 @@ class MessagePassingHandler(object):
 
             current_dfs_steps, batch_list = self._collect_steps(step_number)
             self.current_batch_list = batch_list
-            node_prediction_neighbor_hidden_states, stop_prediction_neighbor_hidden_states, node_features = self._extract_neighbor_data(current_dfs_steps, padding, hidden_size)
+            node_prediction_neighbor_hidden_states, stop_prediction_neighbor_hidden_states, node_features = self._extract_neighbor_data(current_dfs_steps, padding, hidden_size, features_to_dim)
 
             new_hidden_states = GRU(node_features, node_prediction_neighbor_hidden_states, update_gate_linear, reset_gate_input_linear, reset_gate_neighbor_linear, candidate_hidden_linear)
             node_prediction_targets, node_prediction_list, stop_target = self._collect_prediction_targets(current_dfs_steps, new_hidden_states)
@@ -199,7 +205,8 @@ class MessagePassingHandler(object):
 
         features, neighbors = self._root_stop(padding)
 
-        features = create_var_int(torch.LongTensor(features))
+        features = create_var_float(torch.LongTensor(features))
+        features = features_to_dim(features)
         neighbors = torch.stack(neighbors, dim=0).view(-1, self.max_nb, hidden_size)
         neighbors_sum = neighbors.sum(dim=1)
 
@@ -248,6 +255,8 @@ class Decoder(nn.Module):
         self.pred_loss = nn.CrossEntropyLoss(reduction='sum')
         self.stop_loss = nn.BCEWithLogitsLoss(reduction='sum')
 
+        # Features to dim
+        self.features_to_dim = nn.Linear(self.feature_dim, self.hidden_size)
 
     def aggregate(self, hiddens, contexts, x_tree_vecs, mode):
         if mode == 'features':
@@ -266,7 +275,7 @@ class Decoder(nn.Module):
     def forward(self, tree_data, latent_space_tree_vecs):
         
         mp_handler = MessagePassingHandler(tree_data, self.max_nb)
-        mp_handler.message_passing(self.hidden_size, self.W_z, self.U_r, self.W_r, self.W_h)
+        mp_handler.message_passing(self.hidden_size, self.W_z, self.U_r, self.W_r, self.W_h, self.features_to_dim)
         
         pred_hiddens = mp_handler.node_prediction_data.hidden_states
         pred_targets = mp_handler.node_prediction_data.targets
@@ -353,31 +362,6 @@ class Decoder(nn.Module):
                 print(f"Step {step}: Moving forward, predicting new node")
                 new_h = GRU(cur_x, cur_h_nei, self.W_z, self.W_r, self.U_r, self.W_h)
                 pred_features = self.aggregate(new_h, contexts, x_tree_vecs, 'features')
-                """
-                pred_score = aggregate(new_h, contexts, x_tree_vecs, 'features')
-                type_range = VOCAB_SIZE #originally 5
-                if prob_decode:
-                    sort_wid = torch.multinomial(F.softmax(pred_score, dim=1).squeeze(), type_range)
-                else:
-                    _,sort_wid = torch.sort(pred_score, dim=1, descending=True)
-                    sort_wid = sort_wid.data.squeeze()
-
-                next_wid = None
-                for wid in sort_wid[:type_range]:
-                    next_wid = wid
-                    break
-
-                if next_wid is None:
-                    backtrack = True #No more children can be added
-                else:
-                    node_y = TreeNode(next_wid)
-                    node_y.wid = next_wid
-                    node_y.idx = len(all_nodes)
-                    node_y.neighbors.append(node_x)
-                    h[(node_x.idx,node_y.idx)] = new_h[0]
-                    stack.append( (node_y, None) )
-                    all_nodes.append(node_y)
-                    """
                 # For regression, we directly use the predicted features
                 # No need for vocabulary sampling or sorting
                 predicted_features = pred_features.squeeze().detach()  # Get the predicted features for the next node

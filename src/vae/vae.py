@@ -9,6 +9,7 @@ class VAE(nn.Module):
     def __init__(self, hidden_size, latent_size, depth, max_nb, feature_dim, encoding_method="average"):
         super(VAE, self).__init__()
 
+        self.feature_dim = feature_dim
         self.hidden_size = hidden_size
         self.latent_size = latent_size
         self.depth = depth
@@ -16,7 +17,7 @@ class VAE(nn.Module):
         self.encoding_method = encoding_method
         self.feature_dim = feature_dim
 
-        self.encoder = Encoder(self.hidden_size, self.latent_size, self.depth, self.encoding_method)
+        self.encoder = Encoder(self.feature_dim, self.hidden_size, self.latent_size, self.depth, self.encoding_method)
         self.decoder = Decoder(self.hidden_size, self.latent_size, self.max_nb, self.feature_dim)
 
     

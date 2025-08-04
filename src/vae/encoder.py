@@ -5,7 +5,7 @@ from helper import create_var_float, create_var_int, index_select_ND, GraphGRU
 
 class Encoder(nn.Module):
 
-    def __init__(self, hidden_size, latent_size, depth, encoding_method, seed=None):
+    def __init__(self, feature_dim, hidden_size, latent_size, depth, encoding_method, seed=None):
         super(Encoder, self).__init__()
         self.hidden_size = hidden_size
         self.latent_size = latent_size
@@ -15,6 +15,8 @@ class Encoder(nn.Module):
         self.mean_neural_network = nn.Linear(self.hidden_size, self.latent_size)
         self.var_neural_network = nn.Linear(self.hidden_size, self.latent_size)
         self.output_nn = nn.Sequential(nn.Linear(2 * self.hidden_size, self.hidden_size), nn.ReLU())
+
+        self.features_to_hidden_size = nn.Linear(feature_dim, hidden_size)
         
 
     def encode(self, encoding_holder):
@@ -27,7 +29,7 @@ class Encoder(nn.Module):
         mess_graph = create_var_int(mess_graph)
         messages = create_var_float(torch.zeros(mess_graph.size(0), self.hidden_size))
 
-        fnode = fnode 
+        fnode = self.features_to_hidden_size(fnode)
         fmess = index_select_ND(fnode, 0, fmess)
         gru = GraphGRU(self.hidden_size, self.hidden_size, self.depth)
         messages = gru.forward(messages, fmess, mess_graph)

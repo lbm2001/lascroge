@@ -5,7 +5,8 @@ from vae import VAE
 from tree_batch_processor import TreeBatchProcessor
 
 # CONSTANTS (attributes in the model)
-HIDDEN_SIZE = 3
+FEATURE_DIM = 3
+HIDDEN_SIZE = 100
 LATENT_SIZE = 28
 DEPTHT = 3
 ENCODING_METHOD = "average"

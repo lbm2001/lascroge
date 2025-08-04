@@ -134,7 +134,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Encoding Pipeline
 # Lets walk through it by an example with two graphs
 # Mock the data
-
+"""
 adj1 = [
             [0, 1, 1],
             [1, 0, 0],
@@ -158,6 +158,7 @@ feats2 = [
     [0, 1, 2],
     [3, 5, 1]
 ]
+"""
 """
   # Graph 1: Linear chain (3 nodes) - 0-1-2
 adj1 = [
@@ -226,7 +227,7 @@ feats5 = [
       [2, 1, 1],
       [1, 2, 2]
   ]
-  
+  """
   # Graph 1: Linear chain (5 nodes) - 0-1-2-3-4
 adj1 = [
       [0, 1, 0, 0, 0],
@@ -306,10 +307,10 @@ feats5 = [
       [3, 5, 2],  # Branch 1
       [1, 6, 4]   # Branch 2
   ]
-"""
 
-cur_conn = [np.array(adj1), np.array(adj2)] 
-cur_attr = [np.array(feats1), np.array(feats2)]
+
+cur_conn = [np.array(adj1), np.array(adj2), np.array(adj3), np.array(adj4), np.array(adj5)] 
+cur_attr = [np.array(feats1), np.array(feats2), np.array(feats3), np.array(feats4), np.array(feats5)]
 
 #curr_conn = np.load("data/robot_graphs/adj.npy", allow_pickle=True)
 #curr_attr = np.load("data/robot_graphs/feat.npy", allow_pickle=True)
@@ -873,7 +874,7 @@ def decoder_decode(x_tree_vecs, prob_decode, model):
                 node_y = TreeNode(predicted_features)
                 node_y.idx = len(all_nodes)
                 node_y.neighbors.append(node_x)
-                node_x.neighbors.append(node_y)  #ÄÄÄ später hinzugefügt
+                #node_x.neighbors.append(node_y)  #ÄÄÄ später hinzugefügt
                 h[(node_x.idx,node_y.idx)] = new_h[0]
                 stack.append( (node_y, None) )
                 all_nodes.append(node_y)
@@ -988,7 +989,7 @@ class GLSOModel(nn.Module):
         return total_loss, kl_div, pred_acc, stop_acc, pred_loss
     
     def decode(self, z_tree_vecs):
-        root, all_nodes = decoder_decode(z_tree_vecs, prob_decode=True, model=self)
+        root, all_nodes = decoder_decode(z_tree_vecs, prob_decode=False, model=self)
 
         print("Decoded tree structure:")
         print(f"Decoded tree root: {root.features}")
@@ -1015,12 +1016,12 @@ def train_loop():
         if(epoch % 50 == 0):
             print(f"Epoch {epoch}: Loss={loss.item(): .4f}, Pred Acc={wacc}, Stop Acc={tacc}, PredLoss={pred_loss.item(): .4f}, KL Divergence={kl_div.item(): .4f}")
         
-    torch.save(model.state_dict(), 'trained_model.pth')
+    torch.save(model.state_dict(), 'trained_model3.pth')
     print("Model saved after epoch", epoch)
 
 def test_decoder():
     model = GLSOModel().to(device)
-    model.load_state_dict(torch.load('trained_model.pth'))
+    model.load_state_dict(torch.load('trained_model3.pth'))
 
     batch = tensorize(cur_attr, cur_conn)  # Get the current batch
     tree_batch, jtenc_holder = batch
@@ -1031,7 +1032,7 @@ def test_decoder():
     
     z_single = z_tree_vecs[0:1]
     model.decode(z_single)
-    print(cur_conn[0])
+    print(cur_conn[1])
 
     """
     print("Testing with probabilistic decoding:")

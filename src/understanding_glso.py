@@ -4,7 +4,7 @@ import torch.nn as nn  # Neural network layers and functions
 import numpy as np  # Numerical computing library
 import torch.nn.functional as F
 
-torch.manual_seed(42)
+#torch.manual_seed(42)
 # Mod Tree: Graph structures in Memory before they get converted to tensors
 # Assign attributes
 
@@ -398,7 +398,7 @@ explanation = """
 from torch.autograd import Variable
 
 # CONSTANTS (attributes in the model)
-HIDDEN_SIZE = 100
+HIDDEN_SIZE = 300
 LATENT_SIZE = 16
 DEPTHT = 3
 ENCODING_METHOD = "average"
@@ -473,7 +473,7 @@ def index_select_ND(source, dim, index):
     target = source.index_select(dim, index.view(-1))
     return target.view(final_size)
 
-outputNN = nn.Sequential(nn.Linear(2 * HIDDEN_SIZE, HIDDEN_SIZE), nn.ReLU())
+#outputNN = nn.Sequential(nn.Linear(2 * HIDDEN_SIZE, HIDDEN_SIZE), nn.ReLU())
 
 def rsample(z_vecs, W_mean, W_var): #W_mean and W_var are nn.Linear layers
     batch_size = z_vecs.size(0)
@@ -513,7 +513,7 @@ def encode(jtenc_holder, model):
 
     mess_nei = index_select_ND(messages, 0, node_graph)
     node_vecs = torch.cat([fnode, mess_nei.sum(dim=1)], dim=1)
-    node_vecs = outputNN(node_vecs)
+    node_vecs = model.outputNN(node_vecs)
     
     max_len = max([x for _,x in scope])
 
@@ -766,7 +766,7 @@ def decoder_forward(mol_batch, x_tree_vecs, model):
 
 #word_loss, topo_loss, word_acc, topo_acc = decode(x_batch, z_tree_vecs)
 MAX_DECODE_LEN = 100
-def decoder_decode(x_tree_vecs, prob_decode, model):
+def decoder_decode(x_tree_vecs, prob_decode, max_decode_len, model):
         assert x_tree_vecs.size(0) == 1 
 
         stack = []
@@ -786,10 +786,7 @@ def decoder_decode(x_tree_vecs, prob_decode, model):
 
         all_nodes = [root]
         h = {}
-        for step in range(MAX_DECODE_LEN):
-            print(f"Step {step}: Current stack size: {len(stack)}")
-            print(f"Step {step}: Current node: {stack[-1][0].idx}")
-            print(f"Step {step}: Stack contents: {[node.idx for node, _ in stack]}")
+        for step in range(max_decode_len):
             node_x, _ = stack[-1]
             cur_h_nei = [ h[(node_y.idx,node_x.idx)] for node_y in node_x.neighbors ]
             if len(cur_h_nei) > 0:
@@ -804,7 +801,8 @@ def decoder_decode(x_tree_vecs, prob_decode, model):
             # if torch.cuda.is_available():
             #    cur_x = cur_x.cuda()
                     # Convert node features to tensor and project to hidden size
-            cur_x = create_var_float(torch.tensor(node_x.features, dtype=torch.float32).unsqueeze(0))
+            #cur_x = create_var_float(torch.tensor(node_x.features, dtype=torch.float32).unsqueeze(0))
+            cur_x = create_var_float(node_x.features.detach().clone().float().unsqueeze(0))
             cur_x = model.features_to_dim(cur_x)
             cur_x = cur_x.squeeze(1)
             """
@@ -819,25 +817,21 @@ def decoder_decode(x_tree_vecs, prob_decode, model):
             
             #Predict stop
             cur_h = cur_h_nei.sum(dim=1)
-            print(f"Step {step}: cur_x shape: {cur_x.shape}, cur_h shape: {cur_h.shape}")
             # Debug: Print shapes to identify the exact issue
-            print(f"cur_x shape: {cur_x.shape}")
-            print(f"cur_h shape: {cur_h.shape}")
-            print(f"cur_h_nei shape: {cur_h_nei.shape}")
+
             stop_hiddens = torch.cat([cur_x,cur_h], dim=1)
             stop_hiddens = F.relu(model.U_i(stop_hiddens) )
-            print(f"Step {step}: contexts = {contexts}, stop_hiddens shape: {stop_hiddens.shape}")
-            print(f"Step {step}: cur_x = {cur_x.flatten()[:3]}, cur_h = {cur_h.flatten()[:3]}")
+        
             stop_score = aggregate(stop_hiddens, contexts, x_tree_vecs, 'stop', model)
-            print(f"Step {step}: stop_score = {stop_score.item()}")
+            
             if prob_decode:
                 backtrack = (torch.bernoulli( torch.sigmoid(stop_score) ).item() == 0)
             else:
                 backtrack = (stop_score.item() < 0)
                 # print(f'step = {step}, backtrack = {backtrack}, stopscore = {stop_score}')
-            print(f"Step {step}: Normal logic, backtrack = {backtrack}")
+            
             if not backtrack: #Forward: Predict next clique
-                print(f"Step {step}: Moving forward, predicting new node")
+                
                 new_h = GRU(cur_x, cur_h_nei, model.W_z, model.W_r, model.U_r, model.W_h)
                 pred_features = aggregate(new_h, contexts, x_tree_vecs, 'features', model)
                 """
@@ -878,12 +872,12 @@ def decoder_decode(x_tree_vecs, prob_decode, model):
                 h[(node_x.idx,node_y.idx)] = new_h[0]
                 stack.append( (node_y, None) )
                 all_nodes.append(node_y)
-                print(f"Step {step}: Created new node {node_y.idx} with features {predicted_features}")
+                
 
             if backtrack: #Backtrack, use if instead of else
-                print(f"Step {step}: Backtracking")
+                
                 if len(stack) == 1:
-                    print(f"Step {step}: At root, terminating")
+                    
                     break #At root, terminate
 
                 node_fa,_ = stack[-2]
@@ -897,7 +891,7 @@ def decoder_decode(x_tree_vecs, prob_decode, model):
                 h[(node_x.idx,node_fa.idx)] = new_h[0]
                 node_fa.neighbors.append(node_x)
                 stack.pop()
-                print(f"Step {step}: Popped from stack, now at node {stack[-1][0].idx}")
+                
 
         return root, all_nodes
 
@@ -957,6 +951,7 @@ class GLSOModel(nn.Module):
         #Output Weights
         W_o = nn.Linear(HIDDEN_SIZE, feature_dim)  # Output layer for clique prediction
         U_o = nn.Linear(HIDDEN_SIZE, 1)  # Output layer for stop prediction
+        outputNN = nn.Sequential(nn.Linear(2 * HIDDEN_SIZE, HIDDEN_SIZE), nn.ReLU())
 
         input_to_hidden = nn.Linear(feature_dim, HIDDEN_SIZE)  # Linear layer to project input features to hidden size
         features_to_dim = nn.Linear(feature_dim, HIDDEN_SIZE)  # Linear layer to project features to hidden size
@@ -974,6 +969,7 @@ class GLSOModel(nn.Module):
         self.U = U
         self.input_to_hidden = input_to_hidden
         self.features_to_dim = features_to_dim
+        self.outputNN = outputNN
 
     def forward(self, batch, beta, alpha, gamma):
         tree_batch, jtenc_holder = batch
@@ -988,19 +984,49 @@ class GLSOModel(nn.Module):
 
         return total_loss, kl_div, pred_acc, stop_acc, pred_loss
     
-    def decode(self, z_tree_vecs):
-        root, all_nodes = decoder_decode(z_tree_vecs, prob_decode=False, model=self)
+    def decode(self, z_tree_vecs, prob_decode, max_decode_len=MAX_DECODE_LEN):
+        root, all_nodes = decoder_decode(z_tree_vecs, prob_decode=prob_decode, max_decode_len= max_decode_len, model=self)
 
         print("Decoded tree structure:")
         print(f"Decoded tree root: {root.features}")
         print(f"Number of nodes in decoded tree: {len(all_nodes)}")
         for i,node in enumerate(all_nodes):
             print(f"Node {i}: {node.features}")
+def tree_to_adjacency(tree_root):
+    """
+    Convert decoded TreeNode back to adjacency matrix by BFS.
+    """
+    # BFS to assign indices
+    node_to_idx = {}
+    nodes = []
+    queue = [tree_root]
+    idx = 0
+    # BFS to index every node
+    while queue:
+        node = queue.pop(0)
+        if node not in node_to_idx:
+            node_to_idx[node] = idx
+            nodes.append(node)
+            idx += 1
+            for neighbor in node.neighbors:
+                if neighbor not in node_to_idx:
+                    queue.append(neighbor)
+    
+    num_nodes = len(nodes) # Wenn Input Shape = Output Shape sein soll, dann hier num_nodes entfernen und als Parameter in die Methode übergeben
+    adj_matrix = np.zeros((num_nodes, num_nodes), dtype=int)
+    
+    for node, i in node_to_idx.items():
+        for neighbor in node.neighbors:
+            j = node_to_idx[neighbor]
+            adj_matrix[i, j] = 1
+            adj_matrix[j, i] = 1
+    
+    return adj_matrix
 
 def train_loop():
     model = GLSOModel().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    beta, alpha, gamma = 1.0, 1.0, 1.0  # Example hyperparameters
+    beta, alpha, gamma = 0.001, 1.0, 1.0  # Example hyperparameters
     num_epochs = 5000  # Example number of epochs
 
     for epoch in range(num_epochs):
@@ -1016,12 +1042,12 @@ def train_loop():
         if(epoch % 50 == 0):
             print(f"Epoch {epoch}: Loss={loss.item(): .4f}, Pred Acc={wacc}, Stop Acc={tacc}, PredLoss={pred_loss.item(): .4f}, KL Divergence={kl_div.item(): .4f}")
         
-    torch.save(model.state_dict(), 'trained_model3.pth')
+    torch.save(model.state_dict(), 'trained_model.pth')
     print("Model saved after epoch", epoch)
 
 def test_decoder():
     model = GLSOModel().to(device)
-    model.load_state_dict(torch.load('trained_model3.pth'))
+    model.load_state_dict(torch.load('trained_model.pth'))
 
     batch = tensorize(cur_attr, cur_conn)  # Get the current batch
     tree_batch, jtenc_holder = batch
@@ -1029,10 +1055,9 @@ def test_decoder():
     tree_vecs = res[0]
 
     z_tree_vecs, _ = rsample(z_vecs=tree_vecs, W_mean=model.T_mean, W_var=model.T_Var)
-    
-    z_single = z_tree_vecs[0:1]
-    model.decode(z_single)
-    print(cur_conn[1])
+    for i in range(0,5):
+        z_single = z_tree_vecs[i:i+1]
+        model.decode(z_single, prob_decode=False, max_decode_len=MAX_DECODE_LEN)        
 
     """
     print("Testing with probabilistic decoding:")

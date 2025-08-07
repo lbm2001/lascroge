@@ -3,8 +3,9 @@ from torch.autograd import Variable  # Wrapper for automatic differentiation (le
 import torch.nn as nn  # Neural network layers and functions
 import numpy as np  # Numerical computing library
 import torch.nn.functional as F
+import wandb  # Weights and Biases for experiment tracking
 
-#torch.manual_seed(42)
+torch.manual_seed(42)
 # Mod Tree: Graph structures in Memory before they get converted to tensors
 # Assign attributes
 
@@ -1024,10 +1025,27 @@ def tree_to_adjacency(tree_root):
     return adj_matrix
 
 def train_loop():
-    model = GLSOModel().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     beta, alpha, gamma = 0.001, 1.0, 1.0  # Example hyperparameters
     num_epochs = 5000  # Example number of epochs
+    #BATCH SIZE is currently 1, still needs to be implemented TODO
+    # wandb Sweeps for Hyperparameter Optimization TODO
+    wandb.init(
+        project="glso-vae",
+        config={
+            "learning_rate": 0.001,
+            "beta": beta,
+            "alpha": alpha,
+            "gamma": gamma,
+            "epochs": num_epochs,
+            "hidden_size": HIDDEN_SIZE,
+            "latent_size": LATENT_SIZE,
+            "depth": DEPTHT,
+            #"batch_size": BATCH_SIZE,
+        }
+    )
+    model = GLSOModel().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
 
     for epoch in range(num_epochs):
         batch = tensorize(cur_attr, cur_conn)  # Get the current batch
@@ -1039,11 +1057,20 @@ def train_loop():
         nn.utils.clip_grad_norm_(model.parameters(), 50.0)  # Gradient clipping
         optimizer.step()
 
-        if(epoch % 50 == 0):
-            print(f"Epoch {epoch}: Loss={loss.item(): .4f}, Pred Acc={wacc}, Stop Acc={tacc}, PredLoss={pred_loss.item(): .4f}, KL Divergence={kl_div.item(): .4f}")
+        #Skip Accuracy
+        wandb.log({
+            "epoch": epoch,
+            "loss": loss.item(),
+            "pred_loss": pred_loss.item(),
+            "kl_div": kl_div.item(),
+        })
+        #if(epoch % 50 == 0):
+        #    print(f"Epoch {epoch}: Loss={loss.item(): .4f}, Pred Acc={wacc}, Stop Acc={tacc}, PredLoss={pred_loss.item(): .4f}, KL Divergence={kl_div.item(): .4f}")
         
     torch.save(model.state_dict(), 'trained_model.pth')
+    wandb.save('trained_model.pth', name='model', type='model')
     print("Model saved after epoch", epoch)
+    wandb.finish()
 
 def test_decoder():
     model = GLSOModel().to(device)

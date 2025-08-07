@@ -1,0 +1,59 @@
+_wandb:
+    value:
+        cli_version: 0.21.0
+        e:
+            5y4bnkcad14m3igukthktu6dz0cq5anl:
+                codePath: src\understanding_glso.py
+                codePathLocal: understanding_glso.py
+                cpu_count: 12
+                cpu_count_logical: 16
+                disk:
+                    /:
+                        total: "999223717888"
+                        used: "259417726976"
+                email: nurhakyalcin@gmail.com
+                executable: C:\Users\nurha\anaconda3\python.exe
+                git:
+                    commit: 2fa1c4ca761b991b2df7175dbfd212797ed928c3
+                    remote: https://github.com/lbm2001/lascroge
+                host: Nurhak
+                memory:
+                    total: "16847323136"
+                os: Windows-11-10.0.26100-SP0
+                program: C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\src\understanding_glso.py
+                python: CPython 3.12.7
+                root: C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\src
+                startedAt: "2025-08-07T13:05:36.598518Z"
+                writerId: 5y4bnkcad14m3igukthktu6dz0cq5anl
+        m: []
+        python_version: 3.12.7
+        t:
+            "1":
+                - 1
+            "2":
+                - 1
+            "3":
+                - 3
+                - 16
+            "4": 3.12.7
+            "5": 0.21.0
+            "8":
+                - 3
+            "12": 0.21.0
+            "13": windows-amd64
+alpha:
+    value: 1
+beta:
+    value: 0.001
+depth:
+    value: 3
+epochs:
+    value: 5000
+gamma:
+    value: 1
+hidden_size:
+    value: 300
+latent_size:
+    value: 16
+learning_rate:
+    value: 0.001

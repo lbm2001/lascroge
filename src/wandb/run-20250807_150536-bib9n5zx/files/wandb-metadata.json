@@ -1,0 +1,28 @@
+{
+  "os": "Windows-11-10.0.26100-SP0",
+  "python": "CPython 3.12.7",
+  "startedAt": "2025-08-07T13:05:36.598518Z",
+  "program": "C:\\Users\\nurha\\OneDrive\\Desktop\\UNI\\lascroge\\src\\understanding_glso.py",
+  "codePath": "src\\understanding_glso.py",
+  "codePathLocal": "understanding_glso.py",
+  "git": {
+    "remote": "https://github.com/lbm2001/lascroge",
+    "commit": "2fa1c4ca761b991b2df7175dbfd212797ed928c3"
+  },
+  "email": "nurhakyalcin@gmail.com",
+  "root": "C:\\Users\\nurha\\OneDrive\\Desktop\\UNI\\lascroge\\src",
+  "host": "Nurhak",
+  "executable": "C:\\Users\\nurha\\anaconda3\\python.exe",
+  "cpu_count": 12,
+  "cpu_count_logical": 16,
+  "disk": {
+    "/": {
+      "total": "999223717888",
+      "used": "259417726976"
+    }
+  },
+  "memory": {
+    "total": "16847323136"
+  },
+  "writerId": "5y4bnkcad14m3igukthktu6dz0cq5anl"
+}

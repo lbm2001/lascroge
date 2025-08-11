@@ -1,0 +1,12 @@
+joint_features:
+  - name: type
+    process: identity
+  - name: range
+    process: flatten
+  - name: stiffness
+    process: identity
+body_features:
+  - name: pos
+    process: flatten
+  - name: mass
+    process: identity

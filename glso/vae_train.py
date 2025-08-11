@@ -3,6 +3,7 @@ For training the generative model that encodes designs
 example:
 python vae_train.py --save_dir sum_ls28_pred20 --data_dir new_train_data_loc_merge --gamma 20
 python vae_train.py --save_dir random_ls28 --data_dir random_data --gamma 0 --pred
+python vae_train.py --save_dir results/ --data_dir . --gamma 0 --pred
 '''
 
 import torch
@@ -104,7 +105,6 @@ for epoch in range(args.epoch):
 
     cur_loader_idx = 0
     batch_size = args.batch_size
-
     # loop through the dataset by batch
     while cur_loader_idx < data_length:
         cur_attr = attr[cur_loader_idx: cur_loader_idx + batch_size]
@@ -112,8 +112,35 @@ for epoch in range(args.epoch):
         cur_loc = loc[cur_loader_idx: cur_loader_idx + batch_size]
         cur_loader_idx += batch_size
 
+        adj1 = [
+            [0, 1, 1],
+            [1, 0, 0],
+            [1, 0, 0]
+        ]
+
+        feats1 = [
+            [1, 5, 6],
+            [1, 3, 4],
+            [0, 2, 4]
+        ]
+
+        adj2 = [
+            [0, 1, 1],
+            [1, 0, 0],
+            [1, 0, 0]
+        ]
+
+        feats2 = [
+            [2, 7, 8],
+            [0, 1, 2],
+            [3, 5, 1]
+        ]
+
+        cur_conn = [np.array(adj1), np.array(adj2)]
+        cur_attr = [np.array(feats1), np.array(feats2)]
+
         batch = tensorize(cur_attr, cur_conn)
-        loc_batch = torch.tensor(cur_loc, dtype=torch.float32).to(device).reshape(cur_attr.shape[0], 16)
+        loc_batch = batch #torch.tensor(cur_loc, dtype=torch.float32).to(device).reshape(cur_attr.shape[0], 16)
         total_step += 1
 
         model.zero_grad()

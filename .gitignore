@@ -199,3 +199,4 @@ testing.py
 assets/*
 .vscode/
 wandb/
+robots/*

@@ -9,7 +9,14 @@ from typing import Tuple
 import pandas as pd
 from preprocessing.feature_matrix_builder import FeatureMatrixBuilder
 
-class RoboGraph(nx.DiGraph):
+
+class NoValidGraphException(Exception):
+    def __init__(self, message="Graph is not a valid tree structure"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class RoboGraph(nx.Graph):
     """
     Directed graph representation of a MuJoCo model's joint hierarchy.
 
@@ -19,9 +26,20 @@ class RoboGraph(nx.DiGraph):
     def __init__(self, model_xml_path: str, feature_conf_path: str):
         super().__init__()
         # Build spec and model
-        xml = Path(model_xml_path).read_text()
-        self.spec = mujoco.MjSpec.from_string(xml)
-        self.model = self.spec.compile()
+        xml_path = Path(model_xml_path)
+        xml_dir = xml_path.parent
+        
+        # Change to XML directory to resolve relative asset paths
+        original_dir = os.getcwd()
+        os.chdir(xml_dir)
+        
+        try:
+            xml = xml_path.read_text()
+            self.spec = mujoco.MjSpec.from_string(xml)
+            self.model = self.spec.compile()
+        finally:
+            # Always restore original directory
+            os.chdir(original_dir)
 
         # Build namespaces for joints and bodies
         self.jnt_namespace = {i: f"joint_{i}_{self.model.joint(i).name}" for i in range(self.model.njnt)}
@@ -40,7 +58,7 @@ class RoboGraph(nx.DiGraph):
                 self.model.body_jntadr[b_id],
                 self.model.body_jntadr[b_id] + self.model.body_jntnum[b_id]
             )
-            for b_id in range(self.model.nbody)
+            for b_id in range(1, self.model.nbody)
         }
 
         return body_joints
@@ -50,7 +68,7 @@ class RoboGraph(nx.DiGraph):
         body_joints = self.get_body_joints()
 
         # Add nodes
-        for body_id in range(self.model.nbody):
+        for body_id in range(1, self.model.nbody):
             self.add_node(self.body_namespace[body_id], name=self.model.body(body_id).name, type="body")
 
         for joint_id in range(self.model.njnt):
@@ -68,12 +86,30 @@ class RoboGraph(nx.DiGraph):
         return self
 
 
+    def is_tree(self) -> bool:
+        """
+        Check if the graph is a tree (connected and acyclic).
+        """
+        if len(self.nodes) == 0:
+            return True
+        
+        # A tree with n nodes has exactly n-1 edges
+        if len(self.edges) != len(self.nodes) - 1:
+            return False
+        
+        # Check if the graph is connected
+        return nx.is_connected(self)
+
     def build(self) -> None:
         """
         Builds the model for saving it
         """
         self.build_adj_data()
         self.feature_matrix = self.feature_builder.build_matrix()
+        
+        # Validate that the graph is a tree
+        if not self.is_tree():
+            raise NoValidGraphException()
         
 
     def get_adjacency_matrix(self):
@@ -96,7 +132,7 @@ class RoboGraph(nx.DiGraph):
 
         # Get the list of nodes and their names
         nodes = list(self.nodes())
-        node_names = [self.nodes[node]["name"] for node in nodes]
+        node_names = [self.nodes[node].get("name", str(node)) for node in nodes]
 
         # Generate the adjacency matrix
         adjacency_matrix = nx.to_numpy_array(self, nodelist=nodes)

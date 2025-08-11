@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from helper import create_var_float, create_var_int, dfs, GRU, GraphGRU, index_select_ND
-from mod_tree import ModTree, TreeNode
+from vae.helper import create_var_float, create_var_int, dfs, GRU, GraphGRU, index_select_ND
+from vae.mod_tree import TreeNode
 
 
 class Encoder(nn.Module):
@@ -18,6 +18,8 @@ class Encoder(nn.Module):
         self.depth = depth
         self.encoding_method = encoding_method
         self.feature_dim = feature_dim
+
+        self.gru = GraphGRU(self.hidden_size, self.hidden_size, self.depth)
 
         self.input_to_hidden = nn.Linear(feature_dim, hidden_size )  # Linear layer to project input features to hidden size
         self.outputNN = nn.Sequential(nn.Linear(2 * hidden_size , hidden_size ), nn.ReLU())
@@ -49,8 +51,7 @@ class Encoder(nn.Module):
 
         fnode = self.input_to_hidden(fnode) # Here we skip the embedding
         fmess = index_select_ND(fnode, 0, fmess)
-        gru = GraphGRU(self.hidden_size, self.hidden_size, self.depth)
-        messages = gru.forward(messages, fmess, mess_graph)
+        messages = self.gru.forward(messages, fmess, mess_graph)
 
         mess_nei = index_select_ND(messages, 0, node_graph)
         node_vecs = torch.cat([fnode, mess_nei.sum(dim=1)], dim=1)
@@ -179,7 +180,7 @@ class Decoder(nn.Module):
             #if torch.cuda.is_available():
             #    cur_x = cur_x.cuda()
             #Clique embedding
-            cur_x = create_var_float(torch.FloatTensor(np.array(cur_x)))
+            cur_x = create_var_float(torch.FloatTensor(np.array(cur_x, dtype=np.float32)))
             cur_x = self.features_to_dim(cur_x)  # Skip embedding for now 
             
             #Message passing
@@ -237,7 +238,7 @@ class Decoder(nn.Module):
         #cur_x = torch.tensor(cur_x, dtype=torch.float32)
         #if torch.cuda.is_available():
         #    cur_x = cur_x.cuda()
-        cur_x = create_var_float(torch.LongTensor(cur_x))
+        cur_x = create_var_float(torch.FloatTensor(np.array(cur_x, dtype=np.float32)))
         cur_x = self.features_to_dim(cur_x) # Embedding skipped for now
 
         cur_o_nei = torch.stack(cur_o_nei, dim=0).view(-1,self.max_nb,self.hidden_size) # Was soll self.max_nb sein !!!
@@ -258,7 +259,7 @@ class Decoder(nn.Module):
 
         # Convert pred_targets to tensor for regression
         #pred_targets = torch.tensor(pred_targets, dtype=torch.float32)
-        pred_targets = create_var_int(torch.FloatTensor(pred_targets)) #was LongTensor before
+        pred_targets = create_var_int(torch.FloatTensor(np.array(pred_targets))) #was LongTensor before
 
 
         pred_loss = self.pred_loss_nn(pred_scores, pred_targets) / len(mol_batch) #Loss calculation: Compute regression loss for feature prediction
@@ -405,10 +406,7 @@ class VAE(nn.Module):
     
 
     def decode(self, z_tree_vecs, prob_decode):
+        
         root, all_nodes = self.decoder.decode(z_tree_vecs, prob_decode=prob_decode, max_decode_len=self.max_decode_len)
-
-        print("Decoded tree structure:")
-        print(f"Decoded tree root: {root.features}")
-        print(f"Number of nodes in decoded tree: {len(all_nodes)}")
-        for i,node in enumerate(all_nodes):
-            print(f"Node {i}: {node.features}")
+        
+        return root, all_nodes

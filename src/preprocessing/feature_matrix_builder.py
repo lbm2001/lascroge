@@ -2,6 +2,7 @@ import yaml
 import mujoco
 import numpy as np
 import logging
+import os
 from pathlib import Path
 from preprocessing.feature_processor import FeatureProcessor
 
@@ -17,9 +18,20 @@ class FeatureMatrixBuilder:
             self.conf = yaml.safe_load(file)
 
         # Build spec and model
-        xml = Path(model_xml_path).read_text()
-        self.spec = mujoco.MjSpec.from_string(xml)
-        self.model = self.spec.compile()
+        xml_path = Path(model_xml_path)
+        xml_dir = xml_path.parent
+        
+        # Change to XML directory to resolve relative asset paths
+        original_dir = os.getcwd()
+        os.chdir(xml_dir)
+        
+        try:
+            xml = xml_path.read_text()
+            self.spec = mujoco.MjSpec.from_string(xml)
+            self.model = self.spec.compile()
+        finally:
+            # Always restore original directory
+            os.chdir(original_dir)
 
         self.processor = FeatureProcessor()
 
@@ -35,7 +47,7 @@ class FeatureMatrixBuilder:
             all_features.append(feats)
 
         # Process body features
-        for body_id in range(self.model.nbody):
+        for body_id in range(1, self.model.nbody):
             body = self.model.body(body_id)
             feats = [0.0] # is_joint flag
             feats.extend(self._extract_entity_features(body, self.conf["body_features"]))

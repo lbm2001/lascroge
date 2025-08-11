@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable  
 
-from mod_tree import ModTree, TreeNode
+from vae.mod_tree import ModTree
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -164,7 +164,7 @@ def tensorize(attr, conn):  # Convert graph data into neural network input forma
     mess_graph = torch.LongTensor(mess_graph)
     node_graph = torch.LongTensor(node_graph)
     fmess = torch.LongTensor(fmess)
-    fnode = torch.LongTensor(np.array(fnode)) #ÄÄÄ Ohne np.array geht es nicht, kriege Fehlermeldung
+    fnode = torch.FloatTensor(np.array(fnode, dtype=np.float32))
     return tree_batch, (fnode, fmess, node_graph, mess_graph, scope, leaf)
 
 
@@ -246,7 +246,7 @@ def tensorize(attr, conn):  # Convert graph data into neural network input forma
     mess_graph = torch.LongTensor(mess_graph)
     node_graph = torch.LongTensor(node_graph)
     fmess = torch.LongTensor(fmess)
-    fnode = torch.LongTensor(np.array(fnode)) #ÄÄÄ Ohne np.array geht es nicht, kriege Fehlermeldung
+    fnode = torch.FloatTensor(np.array(fnode, dtype=np.float32))
     return tree_batch, (fnode, fmess, node_graph, mess_graph, scope, leaf)
 
 def tree_to_adjacency(tree_root):

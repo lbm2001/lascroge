@@ -198,3 +198,4 @@ glso/data/*
 testing.py
 assets/*
 .vscode/
+wandb/

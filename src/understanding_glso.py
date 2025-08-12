@@ -229,6 +229,7 @@ feats5 = [
       [1, 2, 2]
   ]
   """
+
   # Graph 1: Linear chain (5 nodes) - 0-1-2-3-4
 adj1 = [
       [0, 1, 0, 0, 0],
@@ -310,9 +311,35 @@ feats5 = [
   ]
 
 
+# Convert to int64 to work with LongTensor - use absolute paths for debugger
+import os
+script_dir = os.path.dirname(os.path.abspath(__file__))
+data_dir = os.path.join(script_dir, 'data')
+"""
+adj_g1 = np.load(os.path.join(data_dir, 'adj_g1.npy'), allow_pickle=True).squeeze(0).astype(np.int64)
+adj_g1 = adj_g1[1: , 1:]  # Remove first row and column (padding)
+adj_go1 = np.load(os.path.join(data_dir, 'adj_go1.npy'), allow_pickle=True).squeeze(0).astype(np.int64)
+adj_go1 = adj_go1[1: , 1:]  # Remove first row and column (padding)
+adj_go2 = np.load(os.path.join(data_dir, 'adj_go2.npy'), allow_pickle=True).squeeze(0).astype(np.int64)
+adj_go2 = adj_go2[1: , 1:]  # Remove first row and column (padding)
+adj_h1 = np.load(os.path.join(data_dir, 'adj_h1.npy'), allow_pickle=True).squeeze(0).astype(np.int64)
+adj_h1 = adj_h1[1: , 1:]  # Remove first row and column (padding)
+
+feat_g1 = np.load(os.path.join(data_dir, 'feat_g1.npy'), allow_pickle=True).squeeze(0).astype(np.float32)
+feat_g1 = feat_g1[1: , :]  # Remove first row (padding)
+feat_go1 = np.load(os.path.join(data_dir, 'feat_go1.npy'), allow_pickle=True).squeeze(0).astype(np.float32)
+feat_go1 = feat_go1[1: , :]  # Remove first row (padding)
+feat_go2 = np.load(os.path.join(data_dir, 'feat_go2.npy'), allow_pickle=True).squeeze(0).astype(np.float32)
+feat_go2 = feat_go2[1: , :]  # Remove first row (padding)
+feat_h1 = np.load(os.path.join(data_dir, 'feat_h1.npy'), allow_pickle=True).squeeze(0).astype(np.float32)
+feat_h1 = feat_h1[1: , :]  # Remove first row (padding)
+
+# Use loaded data instead of dummy data
+#cur_conn = [ adj_go1, adj_go2]
+#cur_attr = [ feat_go1, feat_go2]
+"""
 cur_conn = [np.array(adj1), np.array(adj2), np.array(adj3), np.array(adj4), np.array(adj5)] 
 cur_attr = [np.array(feats1), np.array(feats2), np.array(feats3), np.array(feats4), np.array(feats5)]
-
 #curr_conn = np.load("data/robot_graphs/adj.npy", allow_pickle=True)
 #curr_attr = np.load("data/robot_graphs/feat.npy", allow_pickle=True)
 
@@ -509,8 +536,8 @@ def encode(jtenc_holder, model):
 
     fnode = model.input_to_hidden(fnode) # Here we skip the embedding
     fmess = index_select_ND(fnode, 0, fmess)
-    gru = GraphGRU(HIDDEN_SIZE, HIDDEN_SIZE, DEPTHT)
-    messages = gru.forward(messages, fmess, mess_graph)
+    #gru = GraphGRU(HIDDEN_SIZE, HIDDEN_SIZE, DEPTHT)
+    messages = model.gru.forward(messages, fmess, mess_graph)
 
     mess_nei = index_select_ND(messages, 0, node_graph)
     node_vecs = torch.cat([fnode, mess_nei.sum(dim=1)], dim=1)
@@ -710,7 +737,9 @@ def decoder_forward(mol_batch, x_tree_vecs, model):
     #cur_x = torch.tensor(cur_x, dtype=torch.float32)
     #if torch.cuda.is_available():
     #    cur_x = cur_x.cuda()
-    cur_x = create_var_float(torch.LongTensor(cur_x))
+
+    # LongTensor zu FloatTensor geändert, Problem 0708
+    cur_x = create_var_float(torch.FloatTensor(np.array(cur_x)))
     cur_x = model.features_to_dim(cur_x) # Embedding skipped for now
 
     cur_o_nei = torch.stack(cur_o_nei, dim=0).view(-1,MAX_NB,HIDDEN_SIZE) # Was soll MAX_NB sein !!!
@@ -731,7 +760,7 @@ def decoder_forward(mol_batch, x_tree_vecs, model):
 
     # Convert pred_targets to tensor for regression
     #pred_targets = torch.tensor(pred_targets, dtype=torch.float32)
-    pred_targets = create_var_int(torch.FloatTensor(pred_targets)) #was LongTensor before
+    pred_targets = create_var_int(torch.FloatTensor(np.array(pred_targets))) #was LongTensor before, added np.array()
 
 
     pred_loss = pred_loss_nn(pred_scores, pred_targets) / len(mol_batch) #Loss calculation: Compute regression loss for feature prediction
@@ -829,7 +858,7 @@ def decoder_decode(x_tree_vecs, prob_decode, max_decode_len, model):
                 backtrack = (torch.bernoulli( torch.sigmoid(stop_score) ).item() == 0)
             else:
                 backtrack = (stop_score.item() < 0)
-                # print(f'step = {step}, backtrack = {backtrack}, stopscore = {stop_score}')
+            
             
             if not backtrack: #Forward: Predict next clique
                 
@@ -897,41 +926,6 @@ def decoder_decode(x_tree_vecs, prob_decode, max_decode_len, model):
         return root, all_nodes
 
 
-"""
-print("Shape of current attributes:", np.array(cur_attr).shape)
-print("Shape of current connectivity:", np.array(cur_conn).shape)
-
-batch = tensorize(cur_attr, cur_conn)
-
-tree_batch, jtenc_holder = batch
-
-res = encode(jtenc_holder)
-tree_vecs = res[0]
-messages = res[1]
-#print("Encoded tree vectors shape:", tree_vecs.shape)
-
-
-z_tree_vecs, kl_div = rsample(z_vecs=tree_vecs, W_mean=T_mean, W_var=T_Var)
-print("tree_batch: ", [tree_batch[i].nodes for i in range(len(tree_batch))])
-print("Encoded tree vectors shape:", z_tree_vecs.shape)
-print(z_tree_vecs)
-
-pls = decoder_decode(z_tree_vecs, prob_decode=True)  # prob_decode=False for greedy decoding
-#pred_loss, stop_loss, pred_acc, stop_acc = pls
-
-print("Decoded tree structure:")
-decoded_tree, all_nodes = pls
-print(f"Decoded tree root: {decoded_tree.features}")
-print(f"Number of nodes in decoded tree: {len(all_nodes)}")
-print("All nodes in decoded tree:")
-print(pls)
-
-
-asd = decoder_forward(tree_batch, z_tree_vecs)
-pred_loss, stop_loss, pred_acc, stop_acc = asd
-print(f"Prediction Loss: {pred_loss.item()}, Stop Loss: {stop_loss.item()}")
-print(f"Prediction Accuracy: {pred_acc}, Stop Accuracy: {stop_acc}")
-"""
 
 class GLSOModel(nn.Module):
     def __init__(self):
@@ -942,6 +936,7 @@ class GLSOModel(nn.Module):
         U_r = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE, bias=False)
         W_r = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         W_h = nn.Linear(2 * HIDDEN_SIZE, HIDDEN_SIZE)
+        gru = GraphGRU(HIDDEN_SIZE, HIDDEN_SIZE, DEPTHT)
 
         W = nn.Linear(HIDDEN_SIZE + LATENT_SIZE, HIDDEN_SIZE)
 
@@ -964,6 +959,8 @@ class GLSOModel(nn.Module):
         self.U_r = U_r
         self.W_h = W_h
         self.U_i = U_i
+        self.gru = gru
+
         self.W_o = W_o
         self.U_o = U_o
         self.W = W
@@ -981,9 +978,9 @@ class GLSOModel(nn.Module):
         z_tree_vecs, kl_div = rsample(z_vecs=tree_vecs, W_mean=self.T_mean, W_var=self.T_Var)
 
         pred_loss, stop_loss, pred_acc, stop_acc = decoder_forward(tree_batch, z_tree_vecs, self)
-        total_loss = pred_loss + 0.1 * stop_loss + beta * kl_div
+        total_loss = pred_loss +  stop_loss + beta * kl_div
 
-        return total_loss, kl_div, pred_acc, stop_acc, pred_loss
+        return total_loss, kl_div, pred_acc, stop_acc, pred_loss, stop_loss
     
     def decode(self, z_tree_vecs, prob_decode, max_decode_len=MAX_DECODE_LEN):
         root, all_nodes = decoder_decode(z_tree_vecs, prob_decode=prob_decode, max_decode_len= max_decode_len, model=self)
@@ -1025,8 +1022,15 @@ def tree_to_adjacency(tree_root):
     return adj_matrix
 
 def train_loop():
-    beta, alpha, gamma = 0.001, 1.0, 1.0  # Example hyperparameters
-    num_epochs = 5000  # Example number of epochs
+    beta, alpha, gamma = 0.0, 1.0, 1.0  # Example hyperparameters
+    num_epochs = 1000  # Example number of epochs
+
+    beta_start = 0.0
+    step_beta = 0.002
+    max_beta = 1.0
+    warmup_epochs = 400
+    anneal_every = 2000
+    beta = beta_start
     #BATCH SIZE is currently 1, still needs to be implemented TODO
     # wandb Sweeps for Hyperparameter Optimization TODO
     wandb.init(
@@ -1045,36 +1049,55 @@ def train_loop():
     )
     model = GLSOModel().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
 
     for epoch in range(num_epochs):
+        if epoch >= warmup_epochs and epoch % anneal_every == 0:
+            beta = min(beta + step_beta, max_beta)
+
+        if epoch % 100 == 0 and epoch > 0:
+            scheduler.step()
+
         batch = tensorize(cur_attr, cur_conn)  # Get the current batch
         #loc_batch = torch.zeros(batch_size, 16)
         model.zero_grad()
 
-        loss, kl_div, wacc, tacc, pred_loss = model(batch, beta, alpha, gamma)
+        loss, kl_div, wacc, tacc, pred_loss, stop_loss = model(batch, beta, alpha, gamma)
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), 50.0)  # Gradient clipping
         optimizer.step()
 
         #Skip Accuracy
+        
         wandb.log({
             "epoch": epoch,
             "loss": loss.item(),
             "pred_loss": pred_loss.item(),
+            "stop_loss": stop_loss.item(),
             "kl_div": kl_div.item(),
+            "beta": beta,
+            "learning_rate": scheduler.get_last_lr()[0]
         })
-        #if(epoch % 50 == 0):
-        #    print(f"Epoch {epoch}: Loss={loss.item(): .4f}, Pred Acc={wacc}, Stop Acc={tacc}, PredLoss={pred_loss.item(): .4f}, KL Divergence={kl_div.item(): .4f}")
+        if(epoch % 50 == 0):
+            print(f"Epoch {epoch}: Loss={loss.item(): .4f}, Pred Acc={wacc}, Stop Acc={tacc}, PredLoss={pred_loss.item(): .4f}, StopLoss={stop_loss.item(): .4f}, KL Divergence={kl_div.item(): .4f}")
         
-    torch.save(model.state_dict(), 'trained_model.pth')
-    wandb.save('trained_model.pth', name='model', type='model')
+    model_path = os.path.join(script_dir, 'trained_model.pth')
+    torch.save(model.state_dict(), model_path)
+    #wandb.save('trained_model.pth', name='model', type='model')
     print("Model saved after epoch", epoch)
     wandb.finish()
+
+def print_saved_model_shapes():
+    state_dict = torch.load('trained_model.pth')
+    print("Saved model parameter shapes:")
+    for name, param in state_dict.items():
+        print(f"{name}: {param.shape}")
 
 def test_decoder():
     model = GLSOModel().to(device)
     model.load_state_dict(torch.load('trained_model.pth'))
+    #model.eval()
 
     batch = tensorize(cur_attr, cur_conn)  # Get the current batch
     tree_batch, jtenc_holder = batch
@@ -1102,3 +1125,5 @@ def test_decoder():
 if __name__ == "__main__":       
       train_loop()
       test_decoder()
+      #print_saved_model_shapes()
+      

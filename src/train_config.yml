@@ -1,20 +1,20 @@
 parameters:
   hidden_size: 300
   latent_size: 16
-  depth: 10
+  depth: 3
   encoding_method: "average"
   feature_dim: 5
   max_nb: 100
   max_decode_len: 100
 
 training_parameters:
-  num_epochs: 5000
-  beta: 0.001
+  num_epochs: 500
+  beta: 0.0
   alpha: 1.0
   gamma: 1.0
 
 input_data_paths:
-  adj_matrices: "/Users/lukasmueller/github/lascroge/robots/converted/adj.npy"
-  features: "/Users/lukasmueller/github/lascroge/robots/converted/feat.npy"
+  adj_matrices: "../data/robot_graphs/adj_go1.npy"
+  features: "../data/robot_graphs/feat_go1.npy"
 
-model_save_path: "/Users/lukasmueller/github/lascroge/models/model.pth"
+model_save_path: "../models/model.pth"

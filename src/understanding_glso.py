@@ -315,7 +315,7 @@ feats5 = [
 import os
 script_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(script_dir, 'data')
-"""
+
 adj_g1 = np.load(os.path.join(data_dir, 'adj_g1.npy'), allow_pickle=True).squeeze(0).astype(np.int64)
 adj_g1 = adj_g1[1: , 1:]  # Remove first row and column (padding)
 adj_go1 = np.load(os.path.join(data_dir, 'adj_go1.npy'), allow_pickle=True).squeeze(0).astype(np.int64)
@@ -337,9 +337,10 @@ feat_h1 = feat_h1[1: , :]  # Remove first row (padding)
 # Use loaded data instead of dummy data
 #cur_conn = [ adj_go1, adj_go2]
 #cur_attr = [ feat_go1, feat_go2]
-"""
-cur_conn = [np.array(adj1), np.array(adj2), np.array(adj3), np.array(adj4), np.array(adj5)] 
-cur_attr = [np.array(feats1), np.array(feats2), np.array(feats3), np.array(feats4), np.array(feats5)]
+cur_conn = [np.array(adj_go1)]
+cur_attr = [np.array(feat_go1)]
+#cur_conn = [np.array(adj1), np.array(adj2), np.array(adj3), np.array(adj4), np.array(adj5)] 
+#cur_attr = [np.array(feats1), np.array(feats2), np.array(feats3), np.array(feats4), np.array(feats5)]
 #curr_conn = np.load("data/robot_graphs/adj.npy", allow_pickle=True)
 #curr_attr = np.load("data/robot_graphs/feat.npy", allow_pickle=True)
 
@@ -571,7 +572,7 @@ def encode(jtenc_holder, model):
 
 #=== TODO: FROM here we need to continue
 #=============== Helper functions for the decoder ===============
-feature_dim = 3 # Should be the number of features per node, e.g. 3 for [1, 5, 6]
+feature_dim = 5 # Should be the number of features per node, e.g. 3 for [1, 5, 6]
 MAX_NB = 4  # Maximum number of neighbors per node, can be adjusted based on the dataset
 #GRU Weights
 #W_z = nn.Linear(2 * HIDDEN_SIZE, HIDDEN_SIZE)
@@ -1105,7 +1106,7 @@ def test_decoder():
     tree_vecs = res[0]
 
     z_tree_vecs, _ = rsample(z_vecs=tree_vecs, W_mean=model.T_mean, W_var=model.T_Var)
-    for i in range(0,5):
+    for i in range(0,1):
         z_single = z_tree_vecs[i:i+1]
         model.decode(z_single, prob_decode=False, max_decode_len=MAX_DECODE_LEN)        
 
@@ -1123,7 +1124,8 @@ def test_decoder():
         """
 
 if __name__ == "__main__":       
-      train_loop()
+      #train_loop()
       test_decoder()
       #print_saved_model_shapes()
+      print(adj_go1)
       

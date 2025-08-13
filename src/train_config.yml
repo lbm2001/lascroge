@@ -1,14 +1,14 @@
 parameters:
   hidden_size: 300
   latent_size: 16
-  depth: 3
+  depth: 5
   encoding_method: "average"
   feature_dim: 5
   max_nb: 100
   max_decode_len: 100
 
 training_parameters:
-  num_epochs: 500
+  num_epochs: 1000
   beta: 0.0
   alpha: 1.0
   gamma: 1.0

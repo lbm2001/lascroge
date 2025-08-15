@@ -160,8 +160,8 @@ def test_decoder(model_load_path):
 import os
 
 if __name__ == "__main__":       
-      #train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
-      test_decoder(model_load_path=model_path)
+      train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
+      #test_decoder(model_load_path=model_path)
       #script_dir = os.path.dirname(os.path.abspath(__file__))
       #data_dir = os.path.join(script_dir, 'data')
       #print(script_dir)

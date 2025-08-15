@@ -100,7 +100,7 @@ class Decoder(nn.Module):
         self.U = nn.Linear(self.hidden_size  + self.latent_size, self.hidden_size )
         #self.W_o = nn.Linear(self.hidden_size , self.feature_dim)  # Output layer for clique prediction
         self.W_o_categorical = nn.Linear(self.hidden_size, 1)  # For body/joint classification (logits)
-        self.W_o_continuous = nn.Linear(self.hidden_size, feature_dim - 1)  # For remaining features 1508
+        self.W_o_continuous = nn.Linear(self.hidden_size, self.feature_dim - 1)  # For remaining features 1508
         self.U_o = nn.Linear(self.hidden_size , 1)  # Output layer for stop prediction
 
         self.features_to_dim = nn.Linear(self.feature_dim, self.hidden_size )  # Linear layer to project features to hidden size

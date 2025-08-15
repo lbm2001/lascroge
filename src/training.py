@@ -11,7 +11,7 @@ torch.manual_seed(42)
 
 
 
-training_config_path = "/Users/lukasmueller/github/lascroge/src/train_config.yml"
+training_config_path = "train_config.yml"
 
 with open(training_config_path, "r") as file:
     config = yaml.safe_load(file)
@@ -38,11 +38,24 @@ GAMMA = training_params["gamma"]
 
 
 # ========== Input Data ==========
-adj_matrices = np.load(input_data_paths["adj_matrices"], allow_pickle=True)
-features = np.load(input_data_paths["features"], allow_pickle=True)
+adj_matrices = np.load(input_data_paths["adj_matrices"], allow_pickle=True).astype(np.int64)
+features = np.load(input_data_paths["features"], allow_pickle=True).astype(np.float32)
 training_data_size = len(adj_matrices)
 
+adj_go1 = np.load(r'../data/robot_graphs/adj_go1.npy', allow_pickle=True).squeeze(0).astype(np.int64)
+feat_go1 = np.load(r'../data/robot_graphs/feat_go1.npy', allow_pickle=True).squeeze(0).astype(np.float32)
 
+adj_go2 = np.load(r'../data/robot_graphs/adj_go2.npy', allow_pickle=True).squeeze(0).astype(np.int64)
+feat_go2 = np.load(r'../data/robot_graphs/feat_go2.npy', allow_pickle=True).squeeze(0).astype(np.float32)
+
+adj_h1 = np.load(r'../data/robot_graphs/adj_h1.npy', allow_pickle=True).squeeze(0).astype(np.int64)
+feat_h1 = np.load(r'../data/robot_graphs/feat_h1.npy', allow_pickle=True).squeeze(0).astype(np.float32)
+
+adj_matrices = [adj_go1, adj_go2, adj_h1]
+features = [feat_go1, feat_go2, feat_h1]
+training_data_size = len(adj_matrices)
+
+np.set_printoptions(threshold=np.inf, linewidth=200)
 # ========= Model Save Path =========
 model_path = config["model_save_path"]
 
@@ -52,7 +65,20 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
 
-    wandb.init()
+    wandb.init(
+        project="glso-vae",
+        config={
+            "learning_rate": 0.001,
+            "beta": beta,
+            "alpha": alpha,
+            "gamma": gamma,
+            "epochs": num_epochs,
+            "hidden_size": HIDDEN_SIZE,
+            "latent_size": LATENT_SIZE,
+            "depth": DEPTH,
+            #"batch_size": BATCH_SIZE,
+        }
+    )
 
     model = VAE(hidden_size=HIDDEN_SIZE,   
                 latent_size=LATENT_SIZE, 
@@ -63,13 +89,18 @@ def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
                 max_nb=MAX_NB).to(device)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
     for epoch in range(num_epochs):
-        print(f"{epoch} of {num_epochs}")
+        #print(f"{epoch} of {num_epochs}")
+
+        if epoch % 100 == 0 and epoch > 0:
+            scheduler.step()
+
         batch = tensorize(features, adj_matrices)
         
         model.zero_grad()
-        loss, kl_div, wacc, tacc, pred_loss = model(batch, beta, alpha, gamma)
+        loss, kl_div, tacc, pred_loss, stop_loss = model(batch, beta, alpha, gamma)
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), 50.0)  # Gradient clipping
         optimizer.step()
@@ -78,11 +109,14 @@ def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
                 "epoch": epoch,
                 "loss": loss.item(),
                 "pred_loss": pred_loss.item(),
+                "stop_loss": stop_loss.item(),
                 "kl_div": kl_div.item(),
+                "beta": beta,
+                "learning_rate": scheduler.get_last_lr()[0]
                  })
         
-        if(epoch % 50 == 0):
-            print(f"Epoch {epoch}: Loss={loss.item(): .4f}, Pred Acc={wacc}, Stop Acc={tacc}, PredLoss={pred_loss.item(): .4f}, KL Divergence={kl_div.item(): .4f}")
+        if epoch % 50 == 0:
+            print(f"Epoch {epoch}: Loss={loss.item(): .4f}, Stop Acc={tacc}, PredLoss={pred_loss.item(): .4f}, StopLoss={stop_loss.item(): .4f}, KL Divergence={kl_div.item(): .4f}")
         
     torch.save(model.state_dict(), model_save_path)
     wandb.save('trained_model.pth')
@@ -123,7 +157,29 @@ def test_decoder(model_load_path):
         print(tree)
         print("\n")
 
+import os
 
 if __name__ == "__main__":       
       train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
-      test_decoder(model_load_path=model_path)
+      #test_decoder(model_load_path=model_path)
+      #script_dir = os.path.dirname(os.path.abspath(__file__))
+      #data_dir = os.path.join(script_dir, 'data')
+      #print(script_dir)
+      #a = np.load(r'C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\adj_go1.npy', allow_pickle=True)
+      #print(adj_matrices)
+      """
+      print("------------------ adj_go1 ------------------")
+      print(adj_go1)
+      print("------------------ feat_go1 ------------------")
+      print(feat_go1)
+      print("------------------- adj_go2 ------------------")
+      print(adj_go2)
+      print("------------------- feat_go2 ------------------")
+      print(feat_go2)
+      print("------------------- adj_h1 ------------------")
+      print(adj_h1)
+      print("------------------- feat_h1 ------------------")
+      print(feat_h1)
+      """
+      #print(adj_go2.shape, "adj_go2 Shape")
+      #print(adj_h1.shape, "adj_h1 Shape")

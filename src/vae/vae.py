@@ -98,15 +98,19 @@ class Decoder(nn.Module):
 
         self.W = nn.Linear(self.hidden_size  + self.latent_size, self.hidden_size )
         self.U = nn.Linear(self.hidden_size  + self.latent_size, self.hidden_size )
-        self.W_o = nn.Linear(self.hidden_size , self.feature_dim)  # Output layer for clique prediction
+        #self.W_o = nn.Linear(self.hidden_size , self.feature_dim)  # Output layer for clique prediction
+        self.W_o_categorical = nn.Linear(self.hidden_size, 1)  # For body/joint classification (logits)
+        self.W_o_continuous = nn.Linear(self.hidden_size, self.feature_dim - 1)  # For remaining features 1508
         self.U_o = nn.Linear(self.hidden_size , 1)  # Output layer for stop prediction
 
         self.features_to_dim = nn.Linear(self.feature_dim, self.hidden_size )  # Linear layer to project features to hidden size
 
 
     def aggregate(self, hiddens, contexts, x_tree_vecs, mode):
-        if mode == 'features': # Renamed from 'word'
-            V, V_o = self.W, self.W_o
+        if mode == 'features_categorical': # Renamed from 'word'
+            V, V_o = self.W, self.W_o_categorical
+        elif mode == 'features_continuous':
+            V, V_o = self.W, self.W_o_continuous
         elif mode == 'stop':
             V, V_o = self.U, self.U_o
         else:
@@ -252,22 +256,29 @@ class Decoder(nn.Module):
         #Predict next clique
         pred_contexts = torch.cat(pred_contexts, dim=0)
         pred_hiddens = torch.cat(pred_hiddens, dim=0)
-        pred_scores = self.aggregate(pred_hiddens, pred_contexts, x_tree_vecs, 'features')  # Feature prediction: Use aggregate function to predict node features
+        #pred_scores = self.aggregate(pred_hiddens, pred_contexts, x_tree_vecs, 'features')  # Feature prediction: Use aggregate function to predict node features
+        pred_scores_categorical = self.aggregate(pred_hiddens, pred_contexts, x_tree_vecs, 'features_categorical')  # Feature prediction: Use aggregate function to predict node features
+        pred_scores_continuous = self.aggregate(pred_hiddens, pred_contexts, x_tree_vecs, 'features_continuous') # 1508
         
         #print(f"Prediction targets: {pred_targets}")    
         #print(f"Stop targets in training: {stop_targets}")
 
         # Convert pred_targets to tensor for regression
         #pred_targets = torch.tensor(pred_targets, dtype=torch.float32)
-        pred_targets = create_var_int(torch.FloatTensor(np.array(pred_targets))) #was LongTensor before
+        pred_targets_tensor = create_var_int(torch.FloatTensor(np.array(pred_targets))) #was LongTensor before
+        pred_targets_categorical = pred_targets_tensor[:, 0:1] # First Column
+        pred_targets_continuous = pred_targets_tensor[:, 1:]  # Remaining columns
 
+        categorical_loss = F.binary_cross_entropy_with_logits(pred_scores_categorical, pred_targets_categorical, reduction='sum') / len(mol_batch) # Categorical loss for feature prediction   1508
+        continuous_loss = self.pred_loss_nn(pred_scores_continuous, pred_targets_continuous) / len(mol_batch)  # Regression loss for feature prediction 1508
+        pred_loss = categorical_loss + continuous_loss  # Combine losses for feature prediction
 
-        pred_loss = self.pred_loss_nn(pred_scores, pred_targets) / len(mol_batch) #Loss calculation: Compute regression loss for feature prediction
+        #pred_loss = self.pred_loss_nn(pred_scores, pred_targets) / len(mol_batch) #Loss calculation: Compute regression loss for feature prediction
 
         # Die unteren 3 Zeilen sind unnötig, da wir pred_acc nicht brauchen
-        distnace_threshold = 10  # Define a threshold for distance
-        distances = torch.norm(pred_scores - pred_targets, dim=1)  # Calculate distances
-        pred_acc = torch.mean((distances < distnace_threshold).float())  # Calculate accuracy based on distance threshold, The percentage of predicted node features that are "close enough" to the true node features (within a distance threshold).
+        #distnace_threshold = 10  # Define a threshold for distance
+        #distances = torch.norm(pred_scores - pred_targets, dim=1)  # Calculate distances
+        #pred_acc = torch.mean((distances < distnace_threshold).float())  # Calculate accuracy based on distance threshold, The percentage of predicted node features that are "close enough" to the true node features (within a distance threshold).
 
         #Predict stop
         stop_contexts = torch.cat(stop_contexts, dim=0)
@@ -283,7 +294,7 @@ class Decoder(nn.Module):
         stop_acc = torch.eq(stops, stop_targets).float() #compares each prediction with the correct answer; .float() converts to 1.0 (correct) or 0.0 (incorrect)
         stop_acc = torch.sum(stop_acc) / stop_targets.nelement() #The percentage of nodes where the model correctly predicted whether to stop or continue expanding that branch.
 
-        return pred_loss, stop_loss, pred_acc.item(), stop_acc.item()
+        return pred_loss, stop_loss, stop_acc.item()
 
 
     def decode(self, x_tree_vecs, prob_decode, max_decode_len):
@@ -295,7 +306,12 @@ class Decoder(nn.Module):
             contexts = create_var_int( torch.LongTensor(1).zero_() ) #!!! Macht der Zero Vector hier sinn?
 
             #Root Prediction
-            root_features = self.aggregate(init_hiddens, contexts, x_tree_vecs, 'features')
+            #root_features = self.aggregate(init_hiddens, contexts, x_tree_vecs, 'features') 1508
+            root_categorical = self.aggregate(init_hiddens, contexts, x_tree_vecs, 'features_categorical')
+            root_continuous = self.aggregate(init_hiddens, contexts, x_tree_vecs, 'features_continuous')
+            root_categorical_binary = (torch.sigmoid(root_categorical) > 0.5).float() #1508 Wir nutzen nicht direkt Sigmoid im Layer, da wir  F.binary_cross_entropy_with_logits() nutzen -> more stable
+            #1508 Problem mit diesem Ansatz: Wir dürfen Sigmoid bei der Inferenz/Decode nicht vergessen
+            root_features = torch.cat([root_categorical_binary.view(-1), root_continuous.view(-1)], dim=-1)
             #_,root_wid = torch.max(root_score, dim=1) apparently this is not needed, as it is for classification
             #root_wid = root_wid.item() not needed as we have attribute features
 
@@ -336,14 +352,17 @@ class Decoder(nn.Module):
                 if not backtrack: #Forward: Predict next clique
                     
                     new_h = GRU(cur_x, cur_h_nei, self.W_z, self.W_r, self.U_r, self.W_h)
-                    pred_features = self.aggregate(new_h, contexts, x_tree_vecs, 'features')
+
+                    #pred_features = self.aggregate(new_h, contexts, x_tree_vecs, 'features')
 
                     # For regression, we directly use the predicted features
                     # No need for vocabulary sampling or sorting
-                    predicted_features = pred_features.squeeze().detach()  # Get the predicted features for the next node
-                    # Optional: Add some validation or constraints on the predicted features
-                    # For example, clamp values to reasonable ranges
-                    # predicted_features = torch.clamp(predicted_features, min=0.0, max=10.0)
+                    #predicted_features = pred_features.squeeze().detach()  # Get the predicted features for the next node
+                    pred_categorical = self.aggregate(new_h, contexts, x_tree_vecs, 'features_categorical')
+                    pred_continuous = self.aggregate(new_h, contexts, x_tree_vecs, 'features_continuous')
+                    pred_categorical_binary = (torch.sigmoid(pred_categorical) > 0.5).float()
+                    predicted_features = torch.cat([pred_categorical_binary.view(-1), pred_continuous.view(-1)], dim=-1).squeeze().detach()
+
                     node_y = TreeNode(predicted_features)
                     node_y.idx = len(all_nodes)
                     node_y.neighbors.append(node_x)
@@ -399,10 +418,10 @@ class VAE(nn.Module):
 
         z_tree_vecs, kl_div = self.encoder.rsample(z_vecs=tree_vecs)
 
-        pred_loss, stop_loss, pred_acc, stop_acc = self.decoder.forward(tree_batch, z_tree_vecs)
-        total_loss = pred_loss + 0.1 * stop_loss + beta * kl_div
+        pred_loss, stop_loss, stop_acc = self.decoder.forward(tree_batch, z_tree_vecs)
+        total_loss = pred_loss + stop_loss + beta * kl_div
 
-        return total_loss, kl_div, pred_acc, stop_acc, pred_loss
+        return total_loss, kl_div, stop_acc, pred_loss, stop_loss
     
 
     def decode(self, z_tree_vecs, prob_decode):

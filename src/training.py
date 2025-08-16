@@ -11,7 +11,7 @@ torch.manual_seed(42)
 
 
 
-training_config_path = "train_config.yml"
+training_config_path = "/Users/lukasmueller/github/lascroge/src/train_config.yml"
 
 with open(training_config_path, "r") as file:
     config = yaml.safe_load(file)
@@ -40,19 +40,6 @@ GAMMA = training_params["gamma"]
 # ========== Input Data ==========
 adj_matrices = np.load(input_data_paths["adj_matrices"], allow_pickle=True).astype(np.int64)
 features = np.load(input_data_paths["features"], allow_pickle=True).astype(np.float32)
-training_data_size = len(adj_matrices)
-
-adj_go1 = np.load(r'../data/robot_graphs/adj_go1.npy', allow_pickle=True).squeeze(0).astype(np.int64)
-feat_go1 = np.load(r'../data/robot_graphs/feat_go1.npy', allow_pickle=True).squeeze(0).astype(np.float32)
-
-adj_go2 = np.load(r'../data/robot_graphs/adj_go2.npy', allow_pickle=True).squeeze(0).astype(np.int64)
-feat_go2 = np.load(r'../data/robot_graphs/feat_go2.npy', allow_pickle=True).squeeze(0).astype(np.float32)
-
-adj_h1 = np.load(r'../data/robot_graphs/adj_h1.npy', allow_pickle=True).squeeze(0).astype(np.int64)
-feat_h1 = np.load(r'../data/robot_graphs/feat_h1.npy', allow_pickle=True).squeeze(0).astype(np.float32)
-
-adj_matrices = [adj_go1, adj_go2, adj_h1]
-features = [feat_go1, feat_go2, feat_h1]
 training_data_size = len(adj_matrices)
 
 np.set_printoptions(threshold=np.inf, linewidth=200)
@@ -161,25 +148,4 @@ import os
 
 if __name__ == "__main__":       
       train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
-      #test_decoder(model_load_path=model_path)
-      #script_dir = os.path.dirname(os.path.abspath(__file__))
-      #data_dir = os.path.join(script_dir, 'data')
-      #print(script_dir)
-      #a = np.load(r'C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\adj_go1.npy', allow_pickle=True)
-      #print(adj_matrices)
-      """
-      print("------------------ adj_go1 ------------------")
-      print(adj_go1)
-      print("------------------ feat_go1 ------------------")
-      print(feat_go1)
-      print("------------------- adj_go2 ------------------")
-      print(adj_go2)
-      print("------------------- feat_go2 ------------------")
-      print(feat_go2)
-      print("------------------- adj_h1 ------------------")
-      print(adj_h1)
-      print("------------------- feat_h1 ------------------")
-      print(feat_h1)
-      """
-      #print(adj_go2.shape, "adj_go2 Shape")
-      #print(adj_h1.shape, "adj_h1 Shape")
+      test_decoder(model_load_path=model_path)

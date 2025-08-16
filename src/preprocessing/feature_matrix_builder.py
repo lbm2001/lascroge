@@ -35,6 +35,14 @@ class FeatureMatrixBuilder:
 
         self.processor = FeatureProcessor()
 
+        # Geom map
+        self.geom_map = {
+            "type": self.model.geom_type, 
+            "size": self.model.geom_size, 
+            "pos": self.model.geom_pos, 
+            "quat": self.model.geom_quat
+            }
+
 
     def build_matrix(self):
         all_features = []
@@ -51,13 +59,21 @@ class FeatureMatrixBuilder:
             body = self.model.body(body_id)
             feats = [0.0] # is_joint flag
             feats.extend(self._extract_entity_features(body, self.conf["body_features"]))
+            
+            # Get all features of primitive geoms related to the body part
+            primitive_geoms = self._get_primitive_geom_ids(body_id)
+
+            for id in primitive_geoms:
+                feats.extend(self._extract_geom_features(id, self.conf["geom_features"]))
+
             all_features.append(feats)
 
         # Pad features to generate matrix
         max_len = max(len(f_vec) for f_vec in all_features)
-        all_features_padded = [f + [0.0] * (max_len - len(f)) for f in all_features] #TODO: Ask nico if this makes sense
+        all_features_padded = [f + [0.0] * (max_len - len(f)) for f in all_features] 
 
         return np.array(all_features_padded, dtype=np.float32)
+
 
     def _extract_entity_features(self, entity, feature_list_config):
         feats = []
@@ -68,10 +84,32 @@ class FeatureMatrixBuilder:
             if hasattr(entity, feat_name):
                 raw_value = getattr(entity, feat_name)
             else:
-                logging.warning(f"Feature '{feat_name}' not found in {entity}.")
+                logging.warning(f"Feature '{feat_name}' not found in {entity}. Using default value")
                 raw_value = None
 
             processed = self.processor.process(raw_value, method)
             feats.extend(processed)
 
         return feats
+    
+
+    def _extract_geom_features(self, geom_id, feature_list_config):
+        feats = []
+        for feature_entry in feature_list_config:
+            feat_name = feature_entry["name"]
+            method = feature_entry.get("process", "identity")
+            raw_value = self.geom_map.get(feat_name)[geom_id]
+            processed = self.processor.process(raw_value, method)
+
+            feats.extend(processed)
+        
+        return feats
+    
+    def _get_primitive_geom_ids(self, body_id):
+        # Get all geoms for this body
+        geom_ids = [i for i in range(self.model.ngeom) 
+                    if self.model.geom_bodyid[i] == body_id]
+        
+        # Filter out mesh geoms
+        return [geom_id for geom_id in geom_ids 
+                if self.model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_MESH]

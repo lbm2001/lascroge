@@ -4,6 +4,8 @@ import numpy as np
 import logging
 import os
 from pathlib import Path
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
 from preprocessing.feature_processor import FeatureProcessor
 
 
@@ -13,7 +15,9 @@ class FeatureMatrixBuilder:
     using a configuration file and the FeatureProcessor.
     """
 
-    def __init__(self, model_xml_path: str, feature_conf_path: str):
+    def __init__(self, 
+                 model_xml_path: str, 
+                 feature_conf_path: str):
         with open(feature_conf_path, "r") as file:
             self.conf = yaml.safe_load(file)
 
@@ -42,6 +46,9 @@ class FeatureMatrixBuilder:
             "pos": self.model.geom_pos, 
             "quat": self.model.geom_quat
             }
+        
+        # Scaler
+        self.scaler = StandardScaler()
 
 
     def build_matrix(self):
@@ -75,7 +82,14 @@ class FeatureMatrixBuilder:
         max_len = max(len(f_vec) for f_vec in all_features)
         all_features_padded = [f + [0.0] * (max_len - len(f)) for f in all_features] 
 
-        return np.array(all_features_padded, dtype=np.float32)
+        feature_matrix = np.array(all_features_padded, dtype=np.float32)
+        feature_matrix_normalized = self._normalize(self.scaler, feature_matrix)
+
+        return feature_matrix_normalized
+
+
+    def _normalize(self, scaler, feature_matrix):
+        return scaler.fit_transform(feature_matrix)
 
 
     def _extract_entity_features(self, entity, feature_list_config):
@@ -108,6 +122,7 @@ class FeatureMatrixBuilder:
         
         return feats
     
+
     def _get_primitive_geom_ids(self, body_id):
         # Get all geoms for this body
         geom_ids = [i for i in range(self.model.ngeom) 

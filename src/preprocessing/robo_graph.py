@@ -77,11 +77,12 @@ class RoboGraph(nx.Graph):
         for body_id, joints in body_joints.items():
             parent_body_id = self.model.body_parentid[body_id]
             for joint_id in joints:
-                self.add_edge(self.jnt_namespace[joint_id], self.body_namespace[parent_body_id])
-                self.add_edge(self.body_namespace[parent_body_id], self.jnt_namespace[joint_id])
+                if parent_body_id != 0:
+                    self.add_edge(self.jnt_namespace[joint_id], self.body_namespace[parent_body_id])
+                    self.add_edge(self.body_namespace[parent_body_id], self.jnt_namespace[joint_id])
 
                 self.add_edge(self.jnt_namespace[joint_id], self.body_namespace[body_id])
-                self.add_edge(self.body_namespace[parent_body_id], self.jnt_namespace[joint_id])
+                self.add_edge(self.body_namespace[body_id], self.jnt_namespace[joint_id])
 
         return self
 

@@ -60,11 +60,14 @@ class FeatureMatrixBuilder:
             feats = [0.0] # is_joint flag
             feats.extend(self._extract_entity_features(body, self.conf["body_features"]))
             
-            # Get all features of primitive geoms related to the body part
-            primitive_geoms = self._get_primitive_geom_ids(body_id)
+            # TODO: For now, only retrieve the first primitive geom
+            first_primitive_geom_id = self._get_first_primitive_geom_id(body_id)
 
-            for id in primitive_geoms:
-                feats.extend(self._extract_geom_features(id, self.conf["geom_features"]))
+            if first_primitive_geom_id is not None:
+                feats.extend(self._extract_geom_features(first_primitive_geom_id, self.conf["geom_features"]))
+
+            #for id in primitive_geoms:
+            #    feats.extend(self._extract_geom_features(id, self.conf["geom_features"]))
 
             all_features.append(feats)
 
@@ -113,3 +116,17 @@ class FeatureMatrixBuilder:
         # Filter out mesh geoms
         return [geom_id for geom_id in geom_ids 
                 if self.model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_MESH]
+
+
+    def _get_first_primitive_geom_id(self, body_id):
+        # Get all geoms for this body
+        geom_ids = [i for i in range(self.model.ngeom) 
+                    if self.model.geom_bodyid[i] == body_id]
+
+        # Find the first primitive (non-mesh) geom
+        for geom_id in geom_ids:
+            if self.model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_MESH:
+                return geom_id
+        
+        # Return None if no primitive geom found
+        return None

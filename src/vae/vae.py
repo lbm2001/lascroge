@@ -264,7 +264,7 @@ class Decoder(nn.Module):
         #print(f"Stop targets in training: {stop_targets}")
 
         # Convert pred_targets to tensor for regression
-        #pred_targets = torch.tensor(pred_targets, dtype=torch.float32)
+        pred_targets = torch.tensor(np.array(pred_targets, dtype=np.float32), dtype=torch.float32)
         pred_targets_tensor = create_var_int(torch.FloatTensor(np.array(pred_targets))) #was LongTensor before
         pred_targets_categorical = pred_targets_tensor[:, 0:1] # First Column
         pred_targets_continuous = pred_targets_tensor[:, 1:]  # Remaining columns

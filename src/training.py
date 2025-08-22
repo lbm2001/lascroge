@@ -136,6 +136,17 @@ def test_decoder(model_load_path):
 
     z_tree_vecs, _ = model.encoder.rsample(z_vecs=tree_vecs)
     
+    z_single = z_tree_vecs[0:1]  # Take the first tree vector for testing
+    root, all_nodes = model.decode(z_single, prob_decode=False)
+    tree = tree_to_adjacency(root)
+    """
+    print("Decoded tree structure:")
+    print("Number of nodes in decoded tree:", len(all_nodes))
+    for i, node in enumerate(all_nodes):
+        print(f"Node {i}: {node.features}")
+    print(tree)
+    """
+    
     for i in range(training_data_size):
         z_single = z_tree_vecs[i:i+1]
 
@@ -145,13 +156,18 @@ def test_decoder(model_load_path):
         print("Decoded tree structure:")
         print(f"Decoded tree root: {root.features}")
         print(f"Number of nodes in decoded tree: {len(all_nodes)}")
-        for i,node in enumerate(all_nodes):
-            print(f"Node {i}: {node.features}")
-        print(tree)
+        #for i,node in enumerate(all_nodes):
+        #    print(f"Node {i}: {node.features}")
+        #print(tree)
         print("\n")
+        
 
 import os
 
 if __name__ == "__main__":       
-      train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
-      #test_decoder(model_load_path=model_path)
+      #train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
+      test_decoder(model_load_path=model_path)
+      #print(adj_matrices[0].shape)
+      #print(features[0])
+      #print(features[0].shape)
+

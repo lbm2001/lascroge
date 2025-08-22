@@ -83,9 +83,9 @@ class FeatureMatrixBuilder:
         all_features_padded = [f + [0.0] * (max_len - len(f)) for f in all_features] 
 
         feature_matrix = np.array(all_features_padded, dtype=np.float32)
-        feature_matrix_normalized = self._normalize(self.scaler, feature_matrix)
+        #feature_matrix_normalized = self._normalize(self.scaler, feature_matrix)
 
-        return feature_matrix_normalized
+        return feature_matrix
 
 
     def _normalize(self, scaler, feature_matrix):

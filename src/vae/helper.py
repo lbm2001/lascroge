@@ -2,10 +2,25 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import Variable  
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from vae.mod_tree import ModTree
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def normalize_features(features):
+    features_stacked = np.vstack([matrix for matrix in features])
+    scaler = StandardScaler()
+    scaler.fit(features_stacked)
+
+    features_normalized = []
+    for matrix in features:
+        matrix_normalized = scaler.transform(matrix)
+        features_normalized.append(matrix_normalized)
+
+    return np.array(features_normalized, dtype=object)
+
+
 
 
 def create_var_float(tensor, requires_grad=False):

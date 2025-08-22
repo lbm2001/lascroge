@@ -5,7 +5,7 @@ import yaml
 import wandb  
 
 from vae.vae import VAE
-from vae.helper import tensorize, tree_to_adjacency
+from vae.helper import tensorize, tree_to_adjacency, normalize_features
 
 torch.manual_seed(42)
 
@@ -40,6 +40,9 @@ GAMMA = training_params["gamma"]
 # ========== Input Data ==========
 adj_matrices = np.load(input_data_paths["adj_matrices"], allow_pickle=True)
 features = np.load(input_data_paths["features"], allow_pickle=True)
+#features_normalized = normalize_features(features=features)
+
+
 training_data_size = len(adj_matrices)
 
 np.set_printoptions(threshold=np.inf, linewidth=200)
@@ -77,15 +80,15 @@ def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
     
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-
+    
+    batch = tensorize(features, adj_matrices)
+    
     for epoch in range(num_epochs):
         #print(f"{epoch} of {num_epochs}")
 
         if epoch % 100 == 0 and epoch > 0:
             scheduler.step()
 
-        batch = tensorize(features, adj_matrices)
-        
         model.zero_grad()
         loss, kl_div, tacc, pred_loss, stop_loss = model(batch, beta, alpha, gamma)
         loss.backward()

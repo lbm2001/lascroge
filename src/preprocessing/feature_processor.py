@@ -23,6 +23,7 @@ class FeatureProcessor():
     def identity(self, x):
         if x is None:
             return [0.0]
+        print(f"Identity processing: {x}, shape: {np.array(x).shape}")  # Debug line
         return [float(x)]
 
 

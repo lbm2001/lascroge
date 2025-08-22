@@ -83,6 +83,10 @@ class RoboGraph(nx.Graph):
                 self.add_edge(self.jnt_namespace[joint_id], self.body_namespace[body_id])
                 self.add_edge(self.body_namespace[parent_body_id], self.jnt_namespace[joint_id])
 
+        print(f"Total graph nodes: {len(self.nodes())}")
+        print(f"Adding {self.model.nbody - 1} body nodes")
+        print(f"Adding {self.model.njnt} joint nodes") 
+        print(f"Expected total: {(self.model.nbody - 1) + self.model.njnt}")
         return self
 
 

@@ -5,11 +5,25 @@ joint_features:
     process: flatten
   - name: stiffness
     process: identity
+  - name: axis
+    process: flatten
+  - name: pos
+    process: flatten
 body_features:
   - name: pos
     process: flatten
   - name: mass
     process: identity
+  - name: inertia
+    process: flatten
+  - name: quat
+    process: flatten 
+  - name: subtreemass
+    process: identity
 geom_features:
   - name: size
     process : flatten
+  - name: pos
+    process: flatten
+  - name: quat
+    process: flatten

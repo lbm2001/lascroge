@@ -47,6 +47,20 @@ class FeatureMatrixBuilder:
     def build_matrix(self):
         all_features = []
 
+        # Process body features
+        for body_id in range(1, self.model.nbody):
+            body = self.model.body(body_id)
+            feats = [0.0] # is_joint flag
+            feats.extend(self._extract_entity_features(body, self.conf["body_features"]))
+            
+            # Get only the first primitive geom related to the body part
+            first_primitive_geom = self._get_first_primitive_geom_id(body_id)
+
+            if first_primitive_geom is not None:
+                feats.extend(self._extract_geom_features(first_primitive_geom, self.conf["geom_features"]))
+
+            all_features.append(feats)
+
         # Process joint features
         for joint_id in range(self.model.njnt):
             joint = self.model.joint(joint_id)
@@ -54,23 +68,14 @@ class FeatureMatrixBuilder:
             feats.extend(self._extract_entity_features(joint, self.conf["joint_features"]))
             all_features.append(feats)
 
-        # Process body features
-        for body_id in range(1, self.model.nbody):
-            body = self.model.body(body_id)
-            feats = [0.0] # is_joint flag
-            feats.extend(self._extract_entity_features(body, self.conf["body_features"]))
-            
-            # Get all features of primitive geoms related to the body part
-            primitive_geoms = self._get_primitive_geom_ids(body_id)
-
-            for id in primitive_geoms:
-                feats.extend(self._extract_geom_features(id, self.conf["geom_features"]))
-
-            all_features.append(feats)
 
         # Pad features to generate matrix
         max_len = max(len(f_vec) for f_vec in all_features)
         all_features_padded = [f + [0.0] * (max_len - len(f)) for f in all_features] 
+
+        print(f"Number of joints: {self.model.njnt}")
+        print(f"Number of bodies (excluding world): {self.model.nbody - 1}")
+        print(f"Total feature rows: {len(all_features)}")
 
         return np.array(all_features_padded, dtype=np.float32)
 
@@ -105,11 +110,15 @@ class FeatureMatrixBuilder:
         
         return feats
     
-    def _get_primitive_geom_ids(self, body_id):
+    def _get_first_primitive_geom_id(self, body_id):
         # Get all geoms for this body
         geom_ids = [i for i in range(self.model.ngeom) 
                     if self.model.geom_bodyid[i] == body_id]
         
-        # Filter out mesh geoms
-        return [geom_id for geom_id in geom_ids 
-                if self.model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_MESH]
+        # Find the first primitive (non-mesh) geom
+        for geom_id in geom_ids:
+            if self.model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_MESH:
+                return geom_id
+        
+        # Return None if no primitive geom found
+        return None

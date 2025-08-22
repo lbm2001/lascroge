@@ -3,7 +3,7 @@ parameters:
   latent_size: 16
   depth: 5
   encoding_method: "average"
-  feature_dim: 8
+  feature_dim: 23
   max_nb: 100
   max_decode_len: 100
 

@@ -10,3 +10,6 @@ body_features:
     process: flatten
   - name: mass
     process: identity
+geom_features:
+  - name: size
+    process : flatten

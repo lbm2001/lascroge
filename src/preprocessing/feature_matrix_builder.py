@@ -47,12 +47,7 @@ class FeatureMatrixBuilder:
     def build_matrix(self):
         all_features = []
 
-        # Process joint features
-        for joint_id in range(self.model.njnt):
-            joint = self.model.joint(joint_id)
-            feats = [1.0] #is_joint flag
-            feats.extend(self._extract_entity_features(joint, self.conf["joint_features"]))
-            all_features.append(feats)
+
 
         # Process body features
         for body_id in range(1, self.model.nbody):
@@ -69,6 +64,12 @@ class FeatureMatrixBuilder:
             #for id in primitive_geoms:
             #    feats.extend(self._extract_geom_features(id, self.conf["geom_features"]))
 
+            all_features.append(feats)
+        # Process joint features
+        for joint_id in range(self.model.njnt):
+            joint = self.model.joint(joint_id)
+            feats = [1.0] #is_joint flag
+            feats.extend(self._extract_entity_features(joint, self.conf["joint_features"]))
             all_features.append(feats)
 
         # Pad features to generate matrix

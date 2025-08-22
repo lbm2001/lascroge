@@ -7,6 +7,7 @@ from preprocessing.robo_graph import RoboGraph
 from preprocessing.graph_saver import GraphSaver
 
 # Command for copy-pasting: python src/convert_mujoco_xml.py -i "/Users/lukasmueller/github/lascroge/robots/mujoco_models" -s "/Users/lukasmueller/github/lascroge/data/robot_graphs" -c "/Users/lukasmueller/github/lascroge/src/preprocessing/feature_conf.yml"
+#  python convert_mujoco_xml.py -i "C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\mujoco_models" -s "C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs" -c "C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\src\preprocessing\feature_conf.yml"
 
 logging.basicConfig(level=logging.INFO)
 

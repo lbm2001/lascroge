@@ -51,8 +51,101 @@ model_path = config["model_save_path"]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+def compute_normalization_params(features):
+    """Compute separate normalization parameters for different node types and feature dimensions"""
+    # Separate features by node type based on first feature (0=body/geom, 1=joint)
+    body_features = []  # includes geom features (type=0)
+    joint_features = []  # type=1
+    
+    for graph_feats in features:
+        for node_feat in graph_feats:
+            if node_feat[0] == 0:  # body or geom node
+                body_features.append(node_feat[1:])  # exclude type indicator
+            elif node_feat[0] == 1:  # joint node  
+                joint_features.append(node_feat[1:])  # exclude type indicator
+    
+    body_features = np.array(body_features) 
+    joint_features = np.array(joint_features)     
+    
+    body_means = np.mean(body_features, axis=0)
+    body_stds = np.std(body_features, axis=0)
+    # Handle features with zero std (constant features)
+    body_stds = np.where(body_stds < 1e-8, 1.0, body_stds)
+    
+    joint_means = np.mean(joint_features, axis=0)
+    joint_stds = np.std(joint_features, axis=0)
+    # Handle features with zero std (constant features)
+    joint_stds = np.where(joint_stds < 1e-8, 1.0, joint_stds)
+    
+    return body_means, body_stds, joint_means, joint_stds
+
+def normalize_features(features, body_means, body_stds, joint_means, joint_stds):
+    """Apply type-specific Z-score normalization to features"""
+    normalized_features = []
+    
+    for graph_feats in features:
+        normalized_graph = np.zeros_like(graph_feats)
+        
+        for i, node_feat in enumerate(graph_feats):
+            node_type = node_feat[0]
+            normalized_graph[i, 0] = node_type  # Keep type indicator unchanged
+            
+            if node_type == 0:  # body/geom node
+                normalized_graph[i, 1:] = (node_feat[1:] - body_means) / body_stds
+            elif node_type == 1:  # joint node
+                normalized_graph[i, 1:] = (node_feat[1:] - joint_means) / joint_stds
+        
+        normalized_features.append(normalized_graph)
+    
+    return normalized_features
+
+def denormalize_features(normalized_features, norm_params):
+    """Convert normalized features back to original scale"""
+    if isinstance(normalized_features, torch.Tensor):
+        normalized_features = normalized_features.detach().cpu().numpy()
+    
+    denormalized = np.zeros_like(normalized_features)
+    
+    if normalized_features.ndim == 1:  # Single node
+        node_type = int(normalized_features[0])
+        denormalized[0] = node_type
+        
+        if node_type == 0 and 'body_means' in norm_params:
+            denormalized[1:] = (normalized_features[1:] * norm_params['body_stds']) + norm_params['body_means']
+        elif node_type == 1 and 'joint_means' in norm_params:
+            denormalized[1:] = (normalized_features[1:] * norm_params['joint_stds']) + norm_params['joint_means']
+        else:
+            denormalized[1:] = normalized_features[1:]
+    else:  # Multiple nodes
+        for i in range(normalized_features.shape[0]):
+            node_type = int(normalized_features[i, 0])
+            denormalized[i, 0] = node_type
+            
+            if node_type == 0 and 'body_means' in norm_params:
+                denormalized[i, 1:] = (normalized_features[i, 1:] * norm_params['body_stds']) + norm_params['body_means']
+            elif node_type == 1 and 'joint_means' in norm_params:
+                denormalized[i, 1:] = (normalized_features[i, 1:] * norm_params['joint_stds']) + norm_params['joint_means']
+            else:
+                denormalized[i, 1:] = normalized_features[i, 1:]
+    
+    return denormalized
 
 def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
+
+    print("Computing normalization parameters for different node types...")
+    body_means, body_stds, joint_means, joint_stds = compute_normalization_params(features)
+    print("Normalizing features by node type...")
+    normalized_features = normalize_features(features, body_means, body_stds, joint_means, joint_stds)
+
+    norm_params = {
+    'body_means': body_means,
+    'body_stds': body_stds, 
+    'joint_means': joint_means,
+    'joint_stds': joint_stds
+    }
+    norm_path = model_save_path.replace('.pth', '_norm_params.npy')
+    np.save(norm_path, norm_params)
+    print(f"Normalization parameters saved to: {norm_path}")
 
     wandb.init(
         project="glso-vae",
@@ -77,6 +170,12 @@ def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
                 encoding_method=ENCODING_METHOD,
                 max_nb=MAX_NB).to(device)
     
+    for param in model.parameters():
+        if param.dim() == 1:
+            nn.init.constant_(param, 0)
+        else:
+            nn.init.xavier_normal_(param)
+    
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
@@ -86,7 +185,7 @@ def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
         if epoch % 100 == 0 and epoch > 0:
             scheduler.step()
 
-        batch = tensorize(features, adj_matrices)
+        batch = tensorize(normalized_features, adj_matrices)
         
         model.zero_grad()
         loss, kl_div, tacc, pred_loss, stop_loss = model(batch, beta, alpha, gamma)
@@ -124,9 +223,27 @@ def test_decoder(model_load_path):
                 max_nb=MAX_NB).to(device)
     
     model.load_state_dict(torch.load(model_load_path))
+    #model.eval()
 
-    batch = tensorize(features, adj_matrices) 
+    norm_path = model_load_path.replace('.pth', '_norm_params.npy')
+    norm_params = None
+    if os.path.exists(norm_path):
+        norm_params = np.load(norm_path, allow_pickle=True).item()
+        print("Loaded normalization parameters:")
+        # Normalize features for inference (using training parameters)
+        body_means = norm_params['body_means']
+        body_stds = norm_params['body_stds']
+        joint_means = norm_params['joint_means']
+        joint_stds = norm_params['joint_stds']
+        normalized_features = normalize_features(features, body_means, body_stds, joint_means, joint_stds)
+    else:
+        print("Warning: No normalization parameters found. Using raw features.")
+        normalized_features = features
+
+    batch = tensorize(normalized_features, adj_matrices) 
     _, jtenc_holder = batch
+
+    # with torch.no_grad():
     res = model.encoder.encode(jtenc_holder)
     tree_vecs = res[0]
 
@@ -134,8 +251,15 @@ def test_decoder(model_load_path):
     
     z_single = z_tree_vecs[0:1]  # Take the first element for testing
     root, all_nodes = model.decode(z_single, prob_decode=False)
-    print("Decoded tree structure:")
-    print(f"Decoded tree root: {root.features}")
+
+    denormalized_root_features = denormalize_features(root.features, norm_params)
+    print("Decoded tree structure (denormalized root features):")
+    print(denormalized_root_features)
+    print("original root features:")
+    print(features[0][0])
+
+    #print("Decoded tree structure:")
+    #print(f"Decoded tree root: {root.features}")
     print(f"Number of nodes in decoded tree: {len(all_nodes)}")
     #for i, node in enumerate(all_nodes):
     #    print(f"Node {i}: {node.features}")
@@ -160,7 +284,7 @@ import os
 if __name__ == "__main__":       
       #train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
       test_decoder(model_load_path=model_path)
-      print(adj_matrices[0].shape)
-      print(features[0].shape)
+      #print(adj_matrices[0].shape)
+      #print(features[0].shape)
       #print(adj_matrices[1].shape)
       #print(features[1].shape)

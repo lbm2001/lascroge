@@ -11,7 +11,7 @@ torch.manual_seed(42)
 
 
 
-training_config_path = r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\src\train_config.yml"
+training_config_path = "/Users/lukasmueller/github/lascroge/src/train_config.yml"
 
 with open(training_config_path, "r") as file:
     config = yaml.safe_load(file)
@@ -38,15 +38,15 @@ GAMMA = training_params["gamma"]
 
 
 # ========== Input Data ==========
-#adj_matrices = np.load(input_data_paths["adj_matrices"], allow_pickle=True)
-#features = np.load(input_data_paths["features"], allow_pickle=True)
-adj_matrices = np.load(r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\adj.npy", allow_pickle=True)
-features = np.load(r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\feat.npy", allow_pickle=True)
+adj_matrices = np.load(input_data_paths["adj_matrices"], allow_pickle=True)
+features = np.load(input_data_paths["features"], allow_pickle=True)
+#adj_matrices = np.load(r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\adj.npy", allow_pickle=True)
+#features = np.load(r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\feat.npy", allow_pickle=True)
 training_data_size = len(adj_matrices)
 
 np.set_printoptions(threshold=np.inf, linewidth=200)
 # ========= Model Save Path =========
-model_path = config["model_save_path"]
+model_path = config[""]
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -282,8 +282,8 @@ def test_decoder(model_load_path):
 import os
 
 if __name__ == "__main__":       
-      #train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
-      test_decoder(model_load_path=model_path)
+      train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
+      #test_decoder(model_load_path=model_path)
       #print(adj_matrices[0].shape)
       #print(features[0].shape)
       #print(adj_matrices[1].shape)

@@ -3,7 +3,7 @@ parameters:
   latent_size: 28
   depth: 5
   encoding_method: "average"
-  feature_dim: 23
+  feature_dim: 34
   max_nb: 100
   max_decode_len: 100
 
@@ -17,4 +17,4 @@ input_data_paths:
   adj_matrices: "/Users/lukasmueller/github/lascroge/data/robot_graphs/adj.npy"
   features: "/Users/lukasmueller/github/lascroge/data/robot_graphs/feat.npy"
 
-model_save_path: "../models/model.pth"
+model_save_path: "/Users/lukasmueller/github/lascroge/models/model.pth"

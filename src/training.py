@@ -9,9 +9,7 @@ from vae.helper import tensorize, tree_to_adjacency
 
 torch.manual_seed(42)
 
-
-
-training_config_path = "/Users/lukasmueller/github/lascroge/src/train_config.yml"
+training_config_path = "/Users/lukasmueller/github/lascroge/src/train_config_lukas.yml"
 
 with open(training_config_path, "r") as file:
     config = yaml.safe_load(file)
@@ -40,8 +38,6 @@ GAMMA = training_params["gamma"]
 # ========== Input Data ==========
 adj_matrices = np.load(input_data_paths["adj_matrices"], allow_pickle=True)
 features = np.load(input_data_paths["features"], allow_pickle=True)
-#adj_matrices = np.load(r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\adj.npy", allow_pickle=True)
-#features = np.load(r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\feat.npy", allow_pickle=True)
 training_data_size = len(adj_matrices)
 
 np.set_printoptions(threshold=np.inf, linewidth=200)

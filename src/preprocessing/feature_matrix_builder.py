@@ -72,12 +72,15 @@ class FeatureMatrixBuilder:
             feats.extend(self._extract_entity_features(joint, self.conf["joint_features"]))
             joint_features.append(feats)
 
-        # Pad features to generate matrix
-        joint_features_len = len(joint_features[0])
-        body_features_len = len(body_features[0])
+       # Compute max length of features
+        max_len = max(
+            max(len(f) for f in joint_features),
+            max(len(f) for f in body_features)
+        )
 
-        joint_features_padded = [f + [0.0] * body_features_len for f in joint_features]
-        body_features_padded = [f + [0.0] * joint_features_len for f in body_features]
+        # Pad everything to max_len
+        joint_features_padded = [f + [0.0] * (max_len - len(f)) for f in joint_features]
+        body_features_padded = [f + [0.0] * (max_len - len(f)) for f in body_features]
 
         all_features_padded = joint_features_padded + body_features_padded
 

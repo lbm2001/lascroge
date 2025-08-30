@@ -46,7 +46,7 @@ training_data_size = len(adj_matrices)
 
 np.set_printoptions(threshold=np.inf, linewidth=200)
 # ========= Model Save Path =========
-model_path = config[""]
+model_path = config["model_save_path"]
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -136,6 +136,8 @@ def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
     body_means, body_stds, joint_means, joint_stds = compute_normalization_params(features)
     print("Normalizing features by node type...")
     normalized_features = normalize_features(features, body_means, body_stds, joint_means, joint_stds)
+    normalized_features = features
+
 
     norm_params = {
     'body_means': body_means,
@@ -149,6 +151,7 @@ def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
 
     wandb.init(
         project="glso-vae",
+        name="Synthetic Dataset Run",
         config={
             "learning_rate": 0.001,
             "beta": beta,

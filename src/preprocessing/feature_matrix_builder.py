@@ -73,19 +73,30 @@ class FeatureMatrixBuilder:
             joint_features.append(feats)
 
        # Compute max length of features
-        max_len = max(
-            max(len(f) for f in joint_features),
-            max(len(f) for f in body_features)
-        )
+        body_feature_len = max(len(f) for f in body_features)
+        joint_features_len = len(joint_features[0])
 
-        # Pad everything to max_len
-        joint_features_padded = [f + [0.0] * (max_len - len(f)) for f in joint_features]
-        body_features_padded = [f + [0.0] * (max_len - len(f)) for f in body_features]
+        # Pad bodies with no geoms
+        body_features = [f + [0.0] * (body_feature_len - len(f)) for f in body_features]
+
+        # Feature dimensions excluding the flag
+        body_dim = body_feature_len - 1
+        joint_dim = joint_features_len - 1
+
+        # Pad joints: keep flag, add joint features, then pad for bodies
+        joint_features_padded = [
+            [f[0]] + f[1:] + [0.0] * body_dim
+            for f in joint_features
+        ]
+
+        # Pad bodies: keep flag, pad for joints, then add body features
+        body_features_padded = [
+            [f[0]] + [0.0] * joint_dim + f[1:]
+            for f in body_features
+        ]
 
         all_features_padded = joint_features_padded + body_features_padded
-
         return np.array(all_features_padded, dtype=np.float32)
-
 
     def _extract_entity_features(self, entity, feature_list_config):
         feats = []

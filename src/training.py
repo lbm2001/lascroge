@@ -37,7 +37,7 @@ GAMMA = training_params["gamma"]
 
 # ========== Input Data ==========
 adj_matrices = np.load(input_data_paths["adj_matrices"], allow_pickle=True)
-features = np.load(input_data_paths["features"], allow_pickle=True)
+features = np.load(input_data_paths["features"], allow_pickle=True).astype(np.float32)
 training_data_size = len(adj_matrices)
 
 np.set_printoptions(threshold=np.inf, linewidth=200)

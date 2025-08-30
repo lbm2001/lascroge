@@ -3,18 +3,18 @@ parameters:
   latent_size: 28
   depth: 5
   encoding_method: "average"
-  feature_dim: 5
+  feature_dim: 33
   max_nb: 100
   max_decode_len: 100
 
 training_parameters:
-  num_epochs: 500
-  beta: 0.0
+  num_epochs: 5000
+  beta: 0.001
   alpha: 1.0
   gamma: 1.0
 
 input_data_paths:
-  adj_matrices: "/Users/lukasmueller/github/lascroge/data/dummy_data/adj.npy"
-  features: "/Users/lukasmueller/github/lascroge/data/dummy_data/feat.npy"
+  adj_matrices: "/Users/lukasmueller/github/lascroge/data/robot_graphs/adj.npy"
+  features: "/Users/lukasmueller/github/lascroge/data/robot_graphs/feat.npy"
 
-model_save_path: "/Users/lukasmueller/github/lascroge/models/synthetic_data/model.pth"
+model_save_path: "/Users/lukasmueller/github/lascroge/models/mujoco_menagerie/model.pth"

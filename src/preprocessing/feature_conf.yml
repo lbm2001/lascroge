@@ -1,29 +1,39 @@
 joint_features:
-  - name: type
-    process: identity
   - name: range
     process: flatten
+    len: 2
   - name: stiffness
     process: identity
+    len: 1
   - name: axis
     process: flatten
+    len: 3
   - name: pos
     process: flatten
+    len: 3
 body_features:
   - name: pos
     process: flatten
+    len: 3
   - name: mass
     process: identity
+    len: 1
   - name: inertia
     process: flatten
+    len: 3
   - name: quat
-    process: flatten 
+    process: flatten
+    len: 4 
   - name: subtreemass
     process: identity
+    len: 1
 geom_features:
   - name: size
     process : flatten
+    len: 2
   - name: pos
     process: flatten
+    len: 3
   - name: quat
     process: flatten
+    len: 4

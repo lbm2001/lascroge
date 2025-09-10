@@ -15,18 +15,19 @@ body_features:
   - name: pos
     process: flatten
     len: 3
+inertial_features:
   - name: mass
     process: identity
     len: 1
+  - name: ipos
+    process: flatten
+    len: 3
+  - name: iquat
+    process: flatten
+    len: 4
   - name: inertia
     process: flatten
     len: 3
-  - name: quat
-    process: flatten
-    len: 4 
-  - name: subtreemass
-    process: identity
-    len: 1
 geom_features:
   - name: size
     process : flatten

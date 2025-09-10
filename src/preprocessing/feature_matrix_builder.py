@@ -53,6 +53,7 @@ class FeatureMatrixBuilder:
             body = self.model.body(body_id)
             feats = [0.0] # is_joint flag
             feats.extend(self._extract_entity_features(body, self.conf["body_features"]))
+            feats.extend(self._extract_entity_features(body, self.conf["inertial_features"]))
             
             # TODO: For now, only retrieve the first primitive geom
             first_primitive_geom_id = self._get_first_primitive_geom_id(body_id)

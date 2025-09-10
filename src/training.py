@@ -281,9 +281,5 @@ def test_decoder(model_load_path):
 import os
 
 if __name__ == "__main__":       
-      train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
-      #test_decoder(model_load_path=model_path)
-      #print(adj_matrices[0].shape)
-      #print(features[0].shape)
-      #print(adj_matrices[1].shape)
-      #print(features[1].shape)
+      #train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
+      root = test_decoder(model_load_path=model_path)

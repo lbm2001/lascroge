@@ -85,35 +85,37 @@ class XmlTreeBuilder:
 
         return element
 
-    def _build_body_hierarchy(self, current_node, parent_xml, visited):
+
+    def _build_body_hierarchy(self, current_node, parent_xml, visited, parent_joint=None):
         if current_node in visited:
             return
         visited.add(current_node)
 
         node_type = current_node.split("_")[0]  # TODO: read from features
         if node_type == "body":
+            # Create the current body element
             body = self._build_xml_element(parent_xml=parent_xml, node_name=current_node)
+            
+            # If there was a joint leading to this body, create it as a child of this body
+            if parent_joint and parent_joint not in visited:
+                _ = self._build_xml_element(parent_xml=body, node_name=parent_joint)
+                visited.add(parent_joint)
 
+            # Find all joints connected to this body that lead to other bodies
             for joint_neighbor in self.graph.neighbors(current_node):
                 if joint_neighbor not in visited and joint_neighbor.startswith("joint"):
-                    visited.add(joint_neighbor)
-
-                    for next_neighbor in self.graph.neighbors(joint_neighbor):
-                        if next_neighbor not in visited and next_neighbor.startswith("body"):
-                            # Create the next body first
-                            next_body = self._build_xml_element(parent_xml=body, node_name=next_neighbor)
-                            # Then create the joint as a child of that body
-                            _ = self._build_xml_element(parent_xml=next_body, node_name=joint_neighbor)
-                            
-                            # Continue the recursion
-                            self._build_body_hierarchy(next_neighbor, body, visited)
+                    # Find the body connected to this joint (that isn't the current body)
+                    for next_body in self.graph.neighbors(joint_neighbor):
+                        if next_body not in visited and next_body.startswith("body"):
+                            # Recursively process the next body, passing the joint
+                            self._build_body_hierarchy(next_body, body, visited, joint_neighbor)
 
     def build(self):
         # Create root structure
         root_node = list(self.graph.nodes)[0]
         mujoco = etree.Element("mujoco")
         worldbody = etree.SubElement(mujoco, "worldbody")
-        self._build_body_hierarchy(root_node, worldbody, set())
+        self._build_body_hierarchy(root_node, worldbody, set(), parent_joint=None)
         return mujoco
 
 
@@ -131,8 +133,8 @@ class XmlSaver:
 
 
 if __name__ == "__main__":
-    file = "/Users/lukasmueller/github/lascroge/robots/locomotion_robots/unitree_go2/go2.xml"
-    config = "/Users/lukasmueller/github/lascroge/src/preprocessing/feature_conf.yml"
+    file = r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\mujoco_models\unitree_go2\go2.xml"
+    config = r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\src\preprocessing\feature_conf.yml"
 
     rg = RoboGraph(model_xml_path=file, feature_conf_path=config)
     rg.build()

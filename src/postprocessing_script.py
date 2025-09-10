@@ -17,7 +17,7 @@ class XmlTreeBuilder:
         with open(feature_config_path, "r") as file:
             conf = yaml.safe_load(file)
 
-        feature_index = 0
+        feature_index = 1
         for feat_type in conf.keys():
             feature_map[feat_type] = {}
             for feat in conf[feat_type]:
@@ -53,7 +53,7 @@ class XmlTreeBuilder:
 
         element = None
 
-        if feature_values[0] >= 0.5:
+        if feature_values[0] <= 0.5:
             node_type = "body"
             body_feature_map = self.feature_map["body_features"]
             geom_feature_map = self.feature_map["geom_features"]
@@ -133,8 +133,8 @@ class XmlSaver:
 
 
 if __name__ == "__main__":
-    file = r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\mujoco_models\unitree_go2\go2.xml"
-    config = r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\src\preprocessing\feature_conf.yml"
+    file = "/Users/lukasmueller/github/lascroge/robots/test_data/unitree_go2/go2.xml"
+    config = "/Users/lukasmueller/github/lascroge/src/preprocessing/feature_conf.yml"
 
     rg = RoboGraph(model_xml_path=file, feature_conf_path=config)
     rg.build()

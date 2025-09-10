@@ -77,12 +77,14 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, hidden_size, max_nb, latent_size, feature_dim):
+    def __init__(self, hidden_size, max_nb, latent_size, feature_dim, joint_dim, body_dim):
         super(Decoder, self).__init__()
         self.hidden_size = hidden_size
         self.max_nb = max_nb
         self.latent_size = latent_size
         self.feature_dim = feature_dim
+        self.joint_dim = joint_dim
+        self.body_dim = body_dim
 
         #Loss functions
         self.pred_loss_nn = nn.MSELoss(reduction='sum')
@@ -395,7 +397,7 @@ class Decoder(nn.Module):
 
 
 class VAE(nn.Module):
-    def __init__(self, hidden_size, latent_size, feature_dim, max_decode_len, depth, encoding_method, max_nb):
+    def __init__(self, hidden_size, latent_size, feature_dim, max_decode_len, depth, encoding_method, max_nb, joint_dim, body_dim):
         super(VAE, self).__init__()
 
         self.hidden_size = hidden_size
@@ -405,9 +407,11 @@ class VAE(nn.Module):
         self.depth = depth
         self.encoding_method = encoding_method
         self.max_nb = max_nb
+        self.joint_dim = joint_dim
+        self.body_dim = body_dim
 
         self.encoder = Encoder(self.hidden_size, self.latent_size, self.depth, self.encoding_method, feature_dim=self.feature_dim)
-        self.decoder = Decoder(self.hidden_size, self.max_nb, self.latent_size, self.feature_dim)
+        self.decoder = Decoder(self.hidden_size, self.max_nb, self.latent_size, self.feature_dim, self.joint_dim, self.body_dim)
 
 
     def forward(self, batch, beta, alpha, gamma):

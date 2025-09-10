@@ -95,7 +95,7 @@ class FeatureMatrixBuilder:
             for f in body_features
         ]
 
-        all_features_padded = joint_features_padded + body_features_padded
+        all_features_padded = body_features_padded + joint_features_padded
         return np.array(all_features_padded, dtype=np.float32)
 
     def _extract_entity_features(self, entity, feature_list_config):

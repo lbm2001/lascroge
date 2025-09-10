@@ -9,7 +9,7 @@ from vae.helper import tensorize, tree_to_adjacency
 
 torch.manual_seed(42)
 
-training_config_path = "/Users/lukasmueller/github/lascroge/src/train_config_lukas.yml"
+training_config_path = r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\src\train_config_nurhak.yml"
 
 with open(training_config_path, "r") as file:
     config = yaml.safe_load(file)
@@ -24,6 +24,8 @@ LATENT_SIZE = params['latent_size']
 DEPTH = params["depth"]
 ENCODING_METHOD = params["encoding_method"]
 FEATURE_DIM = params["feature_dim"] # Should be the number of features per node, e.g. 3 for [1, 5, 6]
+joint_DIM = params["joint_dim"]
+body_DIM = params["body_dim"]
 MAX_NB = params["max_nb"]
 MAX_DECODE_LEN = params["max_decode_len"]
 
@@ -101,6 +103,8 @@ def denormalize_features(normalized_features, norm_params):
         normalized_features = normalized_features.detach().cpu().numpy()
     
     denormalized = np.zeros_like(normalized_features)
+    body_start = 1 + joint_DIM
+    body_end = 1 + joint_DIM + body_DIM
     
     if normalized_features.ndim == 1:  # Single node
         node_type = int(normalized_features[0])
@@ -167,7 +171,9 @@ def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
                 max_decode_len=MAX_DECODE_LEN, 
                 depth=DEPTH, 
                 encoding_method=ENCODING_METHOD,
-                max_nb=MAX_NB).to(device)
+                max_nb=MAX_NB,
+                joint_dim=joint_DIM,
+                body_dim=body_DIM).to(device)
     
     for param in model.parameters():
         if param.dim() == 1:
@@ -219,7 +225,9 @@ def test_decoder(model_load_path):
                 max_decode_len=MAX_DECODE_LEN, 
                 depth=DEPTH, 
                 encoding_method=ENCODING_METHOD, 
-                max_nb=MAX_NB).to(device)
+                max_nb=MAX_NB,
+                joint_dim=joint_DIM,
+                body_dim=body_DIM).to(device)
     
     model.load_state_dict(torch.load(model_load_path))
     #model.eval()
@@ -251,17 +259,21 @@ def test_decoder(model_load_path):
     z_single = z_tree_vecs[0:1]  # Take the first element for testing
     root, all_nodes = model.decode(z_single, prob_decode=False)
 
-    denormalized_root_features = denormalize_features(root.features, norm_params)
+    #denormalized_root_features = denormalize_features(root.features, norm_params)
     print("Decoded tree structure (denormalized root features):")
-    print(denormalized_root_features)
-    print("original root features:")
-    print(features[0][0])
+    #print(denormalized_root_features)
+    
 
     #print("Decoded tree structure:")
     #print(f"Decoded tree root: {root.features}")
     print(f"Number of nodes in decoded tree: {len(all_nodes)}")
     #for i, node in enumerate(all_nodes):
     #    print(f"Node {i}: {node.features}")
+    for i, node in enumerate(all_nodes):
+        node.features = denormalize_features(node.features, norm_params)
+    #print(root.features)
+    #print(features[1])
+    #print(adj_matrices[1])
     """
     for i in range(training_data_size):
         z_single = z_tree_vecs[i:i+1]
@@ -281,9 +293,11 @@ def test_decoder(model_load_path):
 import os
 
 if __name__ == "__main__":       
-      train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
-      #test_decoder(model_load_path=model_path)
+      #train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
+      test_decoder(model_load_path=model_path)
       #print(adj_matrices[0].shape)
       #print(features[0].shape)
       #print(adj_matrices[1].shape)
       #print(features[1].shape)
+      #print(features[2].shape)
+      #print(features[0])

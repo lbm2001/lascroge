@@ -3,7 +3,9 @@ parameters:
   latent_size: 28
   depth: 5
   encoding_method: "average"
-  feature_dim: 5
+  feature_dim: 40
+  joint_dim: 10
+  body_dim: 29
   max_nb: 100
   max_decode_len: 100
 
@@ -14,7 +16,7 @@ training_parameters:
   gamma: 1.0
 
 input_data_paths:
-  adj_matrices: "/Users/lukasmueller/github/lascroge/data/robot_graphs/adj.npy"
-  features: "/Users/lukasmueller/github/lascroge/data/robot_graphs/feat.npy"
+  adj_matrices: "C:\\Users\\nurha\\OneDrive\\Desktop\\UNI\\lascroge\\data\\robot_graphs\\adj.npy"
+  features: "C:\\Users\\nurha\\OneDrive\\Desktop\\UNI\\lascroge\\data\\robot_graphs\\feat.npy"
 
-model_save_path: "/Users/lukasmueller/github/lascroge/models/synthetic_data/"
+model_save_path: "C:\\Users\\nurha\\OneDrive\\Desktop\\UNI\\lascroge\\models\\model.pth"

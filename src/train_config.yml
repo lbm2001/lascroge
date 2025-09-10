@@ -1,9 +1,9 @@
 parameters:
   hidden_size: 450
-  latent_size: 28
+  latent_size: 32
   depth: 5
   encoding_method: "average"
-  feature_dim: 23
+  feature_dim: 30
   max_nb: 100
   max_decode_len: 100
 

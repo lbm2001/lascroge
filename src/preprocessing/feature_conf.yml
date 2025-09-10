@@ -1,6 +1,4 @@
 joint_features:
-  - name: type
-    process: identity
   - name: range
     process: flatten
   - name: stiffness
@@ -20,6 +18,10 @@ body_features:
     process: flatten 
   - name: subtreemass
     process: identity
+  - name: ipos
+    process: flatten
+  - name: iquat
+    process: flatten
 geom_features:
   - name: size
     process : flatten

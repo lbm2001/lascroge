@@ -200,4 +200,3 @@ assets/*
 .vscode/
 wandb/
 robots/*
-models/*

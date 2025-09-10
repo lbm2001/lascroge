@@ -179,10 +179,6 @@ class Decoder(nn.Module):
                 #Current node features
                 cur_x.append(node_x.features) #Node features: Collect current node's features
 
-            # Convert features to tensor (no embedding needed)
-            #cur_x = torch.tensor(cur_x, dtype=torch.float32)
-            #if torch.cuda.is_available():
-            #    cur_x = cur_x.cuda()
             #Clique embedding
             cur_x = create_var_float(torch.FloatTensor(np.array(cur_x, dtype=np.float32)))
             cur_x = self.features_to_dim(cur_x)  # Skip embedding for now 
@@ -238,10 +234,6 @@ class Decoder(nn.Module):
             cur_o_nei.extend([padding] * pad_len)
 
         
-        # Convert features to tensor (no embedding needed)
-        #cur_x = torch.tensor(cur_x, dtype=torch.float32)
-        #if torch.cuda.is_available():
-        #    cur_x = cur_x.cuda()
         cur_x = create_var_float(torch.FloatTensor(np.array(cur_x, dtype=np.float32)))
         cur_x = self.features_to_dim(cur_x) # Embedding skipped for now
 
@@ -260,25 +252,55 @@ class Decoder(nn.Module):
         pred_scores_categorical = self.aggregate(pred_hiddens, pred_contexts, x_tree_vecs, 'features_categorical')  # Feature prediction: Use aggregate function to predict node features
         pred_scores_continuous = self.aggregate(pred_hiddens, pred_contexts, x_tree_vecs, 'features_continuous') # 1508
         
-        #print(f"Prediction targets: {pred_targets}")    
-        #print(f"Stop targets in training: {stop_targets}")
 
         # Convert pred_targets to tensor for regression
         pred_targets = torch.tensor(np.array(pred_targets, dtype=np.float32), dtype=torch.float32)
         pred_targets_tensor = create_var_int(torch.FloatTensor(np.array(pred_targets))) #was LongTensor before
         pred_targets_categorical = pred_targets_tensor[:, 0:1] # First Column
         pred_targets_continuous = pred_targets_tensor[:, 1:]  # Remaining columns
+        """
+        # Get indices of joint and body nodes
+        joint_indices = (pred_targets_categorical.squeeze(-1) == 1).nonzero(as_tuple=False).squeeze(-1)
+        body_indices = (pred_targets_categorical.squeeze(-1) == 0).nonzero(as_tuple=False).squeeze(-1)
+
+        continuous_loss = 0
+        total_samples = 0
+
+        # Compute loss for joint nodes (only joint features)
+        if len(joint_indices) > 0:
+            joint_pred = pred_scores_continuous[joint_indices][:, :self.joint_dim]
+            joint_target = pred_targets_continuous[joint_indices][:, :self.joint_dim]
+            joint_loss = self.pred_loss_nn(joint_pred, joint_target)
+            continuous_loss += joint_loss
+            total_samples += len(joint_indices)
+
+        # Compute loss for body nodes (only body features)
+        if len(body_indices) > 0:
+            body_pred = pred_scores_continuous[body_indices][:, self.joint_dim:self.joint_dim + self.body_dim]
+            body_target = pred_targets_continuous[body_indices][:, self.joint_dim:self.joint_dim + self.body_dim]
+            body_loss = self.pred_loss_nn(body_pred, body_target)
+            continuous_loss += body_loss
+            total_samples += len(body_indices)
+
+        # Normalize
+        if total_samples > 0:
+            continuous_loss = continuous_loss / len(mol_batch)
+        else:
+            continuous_loss = 0
+
+        categorical_loss = F.binary_cross_entropy_with_logits(
+            pred_scores_categorical, 
+            pred_targets_categorical, 
+            reduction='sum'
+            ) / len(mol_batch)
+
+        pred_loss = categorical_loss + continuous_loss """
 
         categorical_loss = F.binary_cross_entropy_with_logits(pred_scores_categorical, pred_targets_categorical, reduction='sum') / len(mol_batch) # Categorical loss for feature prediction   1508
         continuous_loss = self.pred_loss_nn(pred_scores_continuous, pred_targets_continuous) / len(mol_batch)  # Regression loss for feature prediction 1508
         pred_loss = categorical_loss + continuous_loss  # Combine losses for feature prediction
 
         #pred_loss = self.pred_loss_nn(pred_scores, pred_targets) / len(mol_batch) #Loss calculation: Compute regression loss for feature prediction
-
-        # Die unteren 3 Zeilen sind unnötig, da wir pred_acc nicht brauchen
-        #distnace_threshold = 10  # Define a threshold for distance
-        #distances = torch.norm(pred_scores - pred_targets, dim=1)  # Calculate distances
-        #pred_acc = torch.mean((distances < distnace_threshold).float())  # Calculate accuracy based on distance threshold, The percentage of predicted node features that are "close enough" to the true node features (within a distance threshold).
 
         #Predict stop
         stop_contexts = torch.cat(stop_contexts, dim=0)

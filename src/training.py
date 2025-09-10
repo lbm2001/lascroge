@@ -40,8 +40,8 @@ GAMMA = training_params["gamma"]
 # ========== Input Data ==========
 #adj_matrices = np.load(input_data_paths["adj_matrices"], allow_pickle=True)
 #features = np.load(input_data_paths["features"], allow_pickle=True)
-adj_matrices = np.load(r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\adj.npy", allow_pickle=True)
-features = np.load(r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\feat.npy", allow_pickle=True)
+adj_matrices = np.load(r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\adj.npy", allow_pickle=True).astype(np.int64)
+features = np.load(r"C:\Users\nurha\OneDrive\Desktop\UNI\lascroge\data\robot_graphs\feat.npy", allow_pickle=True).astype(np.float32)
 training_data_size = len(adj_matrices)
 
 np.set_printoptions(threshold=np.inf, linewidth=200)
@@ -249,35 +249,23 @@ def test_decoder(model_load_path):
 
     z_tree_vecs, _ = model.encoder.rsample(z_vecs=tree_vecs)
     
-    z_single = z_tree_vecs[0:1]  # Take the first element for testing
+    z_single = z_tree_vecs[1:2]  # Take the first element for testing
     root, all_nodes = model.decode(z_single, prob_decode=False)
 
-    denormalized_root_features = denormalize_features(root.features, norm_params)
-    print("Decoded tree structure (denormalized root features):")
-    print(denormalized_root_features)
-    print("original root features:")
-    print(features[0][0])
+    for i,node in enumerate(all_nodes):
+        node.features = denormalize_features(node.features, norm_params)
+    
+    tree = tree_to_adjacency(root)
+    #print(tree)
+    print("Root Type: ")
+    print(root.features)
+
 
     #print("Decoded tree structure:")
     #print(f"Decoded tree root: {root.features}")
     print(f"Number of nodes in decoded tree: {len(all_nodes)}")
     #for i, node in enumerate(all_nodes):
     #    print(f"Node {i}: {node.features}")
-    """
-    for i in range(training_data_size):
-        z_single = z_tree_vecs[i:i+1]
-
-        root, all_nodes = model.decode(z_single, prob_decode=False)
-        tree = tree_to_adjacency(root)
-
-        print("Decoded tree structure:")
-        print(f"Decoded tree root: {root.features}")
-        print(f"Number of nodes in decoded tree: {len(all_nodes)}")
-        for i,node in enumerate(all_nodes):
-            print(f"Node {i}: {node.features}")
-        print(tree)
-        print("\n")
-        """
 
 import os
 

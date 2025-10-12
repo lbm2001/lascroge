@@ -21,7 +21,7 @@ else:
 
 torch.manual_seed(42)
 
-training_config_path = Path(__file__).resolve().parent / "train_config_lukas.yml"
+training_config_path = Path(__file__).resolve().parent / "train_config.yml"
 
 with open(training_config_path, "r") as file:
     config = yaml.safe_load(file)

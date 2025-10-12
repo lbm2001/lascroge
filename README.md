@@ -29,7 +29,7 @@ Inspect the resulting `.npy` files to make sure the feature dimension matches th
 
 ## Training the VAE
 
-1. Edit `src/train_config_lukas.yml` (or copy it) to point to the dataset you just produced and choose where to store the model weights.
+1. Edit `src/train_config.yml` (or copy it) to point to the dataset you just produced and choose where to store the model weights.
 2. Adjust the hyperparameters if needed. In particular, set `feature_dim` to the width of your feature vectors.
 3. Launch training:
 

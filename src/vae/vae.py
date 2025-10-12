@@ -4,8 +4,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from vae.helper import create_var_float, create_var_int, dfs, GRU, GraphGRU, index_select_ND
-from vae.mod_tree import TreeNode
+from .helper import (
+    create_var_float,
+    create_var_int,
+    dfs,
+    GRU,
+    GraphGRU,
+    index_select_ND,
+)
+from .mod_tree import TreeNode
 
 
 class Encoder(nn.Module):

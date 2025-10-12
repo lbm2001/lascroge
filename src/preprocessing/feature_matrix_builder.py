@@ -14,11 +14,22 @@ class FeatureMatrixBuilder:
     """
 
     def __init__(self, model_xml_path: str, feature_conf_path: str):
+        xml_path = Path(model_xml_path).expanduser()
+        if not xml_path.is_absolute():
+            xml_path = (Path.cwd() / xml_path).resolve()
+        else:
+            xml_path = xml_path.resolve()
+
+        feature_conf_path = Path(feature_conf_path).expanduser()
+        if not feature_conf_path.is_absolute():
+            feature_conf_path = (Path.cwd() / feature_conf_path).resolve()
+        else:
+            feature_conf_path = feature_conf_path.resolve()
+
         with open(feature_conf_path, "r") as file:
             self.conf = yaml.safe_load(file)
 
         # Build spec and model
-        xml_path = Path(model_xml_path)
         xml_dir = xml_path.parent
         
         # Change to XML directory to resolve relative asset paths

@@ -1,22 +1,44 @@
 import torch  # PyTorch tensor library
-import torch.nn as nn  
-import numpy as np  
+import torch.nn as nn
+import numpy as np
 import yaml
-import wandb  
+import wandb
+from pathlib import Path
+import sys
 
-from vae.vae import VAE
-from vae.helper import tensorize, tree_to_adjacency
+if __package__ is None or __package__ == "":
+    src_dir = Path(__file__).resolve().parent
+    parent_dir = src_dir.parent
+    for candidate in (src_dir, parent_dir):
+        candidate_str = str(candidate)
+        if candidate_str not in sys.path:
+            sys.path.insert(0, candidate_str)
+    from vae.vae import VAE
+    from vae.helper import tensorize, tree_to_adjacency
+else:
+    from .vae.vae import VAE
+    from .vae.helper import tensorize, tree_to_adjacency
 
 torch.manual_seed(42)
 
-training_config_path = "/Users/lukasmueller/github/lascroge/src/train_config_lukas.yml"
+training_config_path = Path(__file__).resolve().parent / "train_config_lukas.yml"
 
 with open(training_config_path, "r") as file:
     config = yaml.safe_load(file)
 
 params = config["parameters"]
 training_params = config["training_parameters"]
-input_data_paths = config["input_data_paths"]
+config_dir = training_config_path.parent
+
+def _resolve_path(path_str):
+    path = Path(path_str).expanduser()
+    if not path.is_absolute():
+        path = (config_dir / path).resolve()
+    else:
+        path = path.resolve()
+    return str(path)
+
+input_data_paths = {key: _resolve_path(value) for key, value in config["input_data_paths"].items()}
 
 # ========== Parameters ==========
 HIDDEN_SIZE = params['hidden_size']
@@ -42,7 +64,7 @@ training_data_size = len(adj_matrices)
 
 np.set_printoptions(threshold=np.inf, linewidth=200)
 # ========= Model Save Path =========
-model_path = config["model_save_path"]
+model_path = _resolve_path(config["model_save_path"])
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -281,5 +303,5 @@ def test_decoder(model_load_path):
 import os
 
 if __name__ == "__main__":       
-      #train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
-      root = test_decoder(model_load_path=model_path)
+      train_loop(num_epochs=NUM_EPOCHS, beta=BETA, alpha=ALPHA, gamma=GAMMA, model_save_path=model_path)
+      #root = test_decoder(model_load_path=model_path)

@@ -3,7 +3,7 @@ parameters:
   latent_size: 28
   depth: 5
   encoding_method: "average"
-  feature_dim: 32
+  feature_dim: 34
   max_nb: 100
   max_decode_len: 100
 
@@ -14,7 +14,7 @@ training_parameters:
   gamma: 1.0
 
 input_data_paths:
-  adj_matrices: "/Users/lukasmueller/github/lascroge/data/go2_test/adj.npy"
-  features: "/Users/lukasmueller/github/lascroge/data/go2_test/feat.npy"
+  adj_matrices: "../data/go2_test/adj.npy"
+  features: "../data/go2_test/feat.npy"
 
-model_save_path: "/Users/lukasmueller/github/lascroge/models/go2_test/model.pth"
+model_save_path: "../models/go2_test/model.pth"

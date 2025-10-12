@@ -25,8 +25,20 @@ class RoboGraph(nx.Graph):
     """
     def __init__(self, model_xml_path: str, feature_conf_path: str):
         super().__init__()
+        # Normalize incoming paths so relative inputs work regardless of cwd
+        xml_path = Path(model_xml_path).expanduser()
+        if not xml_path.is_absolute():
+            xml_path = (Path.cwd() / xml_path).resolve()
+        else:
+            xml_path = xml_path.resolve()
+
+        feature_conf_path = Path(feature_conf_path).expanduser()
+        if not feature_conf_path.is_absolute():
+            feature_conf_path = (Path.cwd() / feature_conf_path).resolve()
+        else:
+            feature_conf_path = feature_conf_path.resolve()
+
         # Build spec and model
-        xml_path = Path(model_xml_path)
         xml_dir = xml_path.parent
         
         # Change to XML directory to resolve relative asset paths
@@ -45,7 +57,7 @@ class RoboGraph(nx.Graph):
         self.jnt_namespace = {i: f"joint_{i}_{self.model.joint(i).name}" for i in range(self.model.njnt)}
         self.body_namespace = {i: f"body_{i}_{self.model.body(i).name}" for i in range(self.model.nbody)}
 
-        self.feature_builder = FeatureMatrixBuilder(model_xml_path=model_xml_path, feature_conf_path=feature_conf_path)
+        self.feature_builder = FeatureMatrixBuilder(model_xml_path=str(xml_path), feature_conf_path=str(feature_conf_path))
         self.feature_matrix = None
 
         

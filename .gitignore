@@ -201,3 +201,4 @@ assets/*
 wandb/
 robots/*
 models/*
+.DS_Store

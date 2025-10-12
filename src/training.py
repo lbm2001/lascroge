@@ -154,7 +154,6 @@ def train_loop(num_epochs, beta, alpha, gamma, model_save_path):
     body_means, body_stds, joint_means, joint_stds = compute_normalization_params(features)
     print("Normalizing features by node type...")
     normalized_features = normalize_features(features, body_means, body_stds, joint_means, joint_stds)
-    normalized_features = features
 
 
     norm_params = {

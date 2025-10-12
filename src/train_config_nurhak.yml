@@ -1,6 +1,6 @@
 parameters:
   hidden_size: 450
-  latent_size: 28
+  latent_size: 32
   depth: 5
   encoding_method: "average"
   feature_dim: 5

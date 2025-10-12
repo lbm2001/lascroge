@@ -270,8 +270,7 @@ def test_decoder(model_load_path):
 
     z_tree_vecs, _ = model.encoder.rsample(z_vecs=tree_vecs)
     
-    z_single = z_tree_vecs[1:2]  # Take the first element for testing
-    root, all_nodes = model.decode(z_single, prob_decode=False)
+    root, all_nodes = model.decode(z_tree_vecs=z_tree_vecs, prob_decode=False)
 
     for i,node in enumerate(all_nodes):
         node.features = denormalize_features(node.features, norm_params)

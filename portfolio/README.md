@@ -1,15 +1,14 @@
----
+<!---
 title: Large Scale Robot Generation
 venue: Technical University of Darmstadt
 period: Apr–Sep 2025
-blurb: Can a variational autoencoder over robot graphs learn a continuous latent space of morphologies, so that thousands of diverse, physically plausible embodiments can be sampled directly from existing robot designs?
 aiAssisted: true
 tags:
   - Graph Neural Networks
   - Variational Autoencoder
   - Robot Morphology
   - MuJoCo
----
+--->
 
 Cross-embodiment locomotion policies generalize better the more diverse the robots they are trained on, but the design space of embodiments grows exponentially with the number of components. Existing automated approaches are grammar-based: they assemble robots from a predefined library of parts, which requires prior knowledge to define that library, restricts designs to discrete combinations, and ignores the continuous physical parameters — mass, geometry, joint limits — of real systems. With Nurhak Yalcin, I built an end-to-end system that instead learns a generative model directly from existing robot designs: a variational autoencoder (VAE) implemented as a message-passing graph neural network (MPNN), so that novel, physically plausible embodiments can be sampled from a learned latent space.
 

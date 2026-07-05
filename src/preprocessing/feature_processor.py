@@ -1,8 +1,7 @@
 import numpy as np
-import logging
 
 
-class FeatureProcessor():
+class FeatureProcessor:
     """
     Class that contains feature-specific processing functions.
     """
@@ -19,7 +18,6 @@ class FeatureProcessor():
             raise Exception(f"Unknown processing method '{method}'.")
         return fn(x=value, inv=inv)
 
-
     def identity(self, x, inv):
         if inv:
             return str(x.item())
@@ -28,9 +26,8 @@ class FeatureProcessor():
                 return [0.0]
             return [float(x)]
 
-
     def flatten(self, x, inv):
-        
+
         if inv:
             return " ".join(map(str, x))
         else:

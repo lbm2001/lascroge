@@ -1,4 +1,3 @@
-import numpy as np
 from preprocessing.robo_graph import RoboGraph
 from preprocessing.feature_processor import FeatureProcessor
 from lxml import etree
@@ -10,7 +9,11 @@ class XmlTreeBuilder:
         self.graph = graph
         self.feature_map = self._process_feature_config(feature_config_path)
         self.feature_processor = FeatureProcessor()
-        self.inertial_feature_map = {"iquat": "quat", "ipos": "pos", "inertia": "diaginertia"}
+        self.inertial_feature_map = {
+            "iquat": "quat",
+            "ipos": "pos",
+            "inertia": "diaginertia",
+        }
 
     def _process_feature_config(self, feature_config_path):
         feature_map = {}
@@ -61,7 +64,9 @@ class XmlTreeBuilder:
 
             body_attributes = self._get_attributes(body_feature_map, feature_values)
             geom_attributes = self._get_attributes(geom_feature_map, feature_values)
-            inertial_attributes = self._get_attributes(inertial_feature_map, feature_values)
+            inertial_attributes = self._get_attributes(
+                inertial_feature_map, feature_values
+            )
 
             element = etree.SubElement(parent_xml, node_type)
             inertial = etree.SubElement(element, "inertial")
@@ -81,12 +86,12 @@ class XmlTreeBuilder:
             element = etree.SubElement(parent_xml, node_type)
             element.set("name", node_name)
             element.attrib.update(joint_attributes)
-                
 
         return element
 
-
-    def _build_body_hierarchy(self, current_node, parent_xml, visited, parent_joint=None):
+    def _build_body_hierarchy(
+        self, current_node, parent_xml, visited, parent_joint=None
+    ):
         if current_node in visited:
             return
         visited.add(current_node)
@@ -94,8 +99,10 @@ class XmlTreeBuilder:
         node_type = current_node.split("_")[0]  # TODO: read from features
         if node_type == "body":
             # Create the current body element
-            body = self._build_xml_element(parent_xml=parent_xml, node_name=current_node)
-            
+            body = self._build_xml_element(
+                parent_xml=parent_xml, node_name=current_node
+            )
+
             # If there was a joint leading to this body, create it as a child of this body
             if parent_joint and parent_joint not in visited:
                 _ = self._build_xml_element(parent_xml=body, node_name=parent_joint)
@@ -108,7 +115,9 @@ class XmlTreeBuilder:
                     for next_body in self.graph.neighbors(joint_neighbor):
                         if next_body not in visited and next_body.startswith("body"):
                             # Recursively process the next body, passing the joint
-                            self._build_body_hierarchy(next_body, body, visited, joint_neighbor)
+                            self._build_body_hierarchy(
+                                next_body, body, visited, joint_neighbor
+                            )
 
     def build(self):
         # Create root structure
@@ -127,7 +136,10 @@ class XmlSaver:
         with open(path, "wb") as f:
             f.write(
                 etree.tostring(
-                    self.xml_root, pretty_print=True, xml_declaration=True, encoding="UTF-8"
+                    self.xml_root,
+                    pretty_print=True,
+                    xml_declaration=True,
+                    encoding="UTF-8",
                 )
             )
 

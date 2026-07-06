@@ -1,0 +1,50 @@
+# Compiles the LaTeX paper and publishes the PDF as a GitHub Release asset under
+# the rolling `paper-latest` tag. The portfolio site links to that release URL:
+#   https://github.com/lbm2001/au-mdt/releases/download/paper-latest/paper.pdf
+#
+# Nothing is committed back to the repo, so `main` never diverges from a CI bot
+# commit and the large PDF stays out of git history / the working tree. This
+# keeps the LaTeX toolchain in THIS repo and out of the portfolio build.
+#
+# Assumes the paper sources live in a `paper/` subdirectory with `paper/main.tex`
+# as the root file (adjust `working_directory` / `root_file` below if not).
+name: Build paper PDF
+
+on:
+  push:
+    branches: [main]
+    # Only rebuild when the paper sources actually change.
+    paths:
+      - "paper/**"
+      - "!paper/build/**"
+  workflow_dispatch: # lets you trigger a rebuild by hand from the Actions tab
+
+permissions:
+  contents: write # needed to create/update the release and its asset
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Full TeX Live in a container; runs `latexmk`, honoring your paper/.latexmkrc
+      # and auto-running bibtex/biber for references.bib.
+      - name: Compile with latexmk
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: paper
+          root_file: main.tex
+
+      # Give the asset a stable name (the release URL uses the file's basename).
+      - name: Rename PDF to lukas-mueller_large-scale-robot-generation.pdf
+        run: cp paper/main.pdf lukas-mueller_large-scale-robot-generation.pdf
+
+      # Create/update the `paper-latest` release and replace its paper.pdf asset.
+      - name: Publish PDF as a Release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: paper-latest
+          name: Paper (latest build)
+          files: lukas-mueller_large-scale-robot-generation.pdf
+          fail_on_unmatched_files: true

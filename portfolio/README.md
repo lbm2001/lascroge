@@ -3,6 +3,9 @@ title: Large Scale Robot Generation
 venue: Technical University of Darmstadt
 period: Apr–Sep 2025
 aiAssisted: true
+links:
+  - label: Paper
+    href: https://github.com/lbm2001/lascroge/releases/download/paper-latest/lukas-mueller_large-scale-robot-generation.pdf
 tags:
   - Graph Neural Networks
   - Variational Autoencoder
